@@ -83,6 +83,8 @@ export interface ProjectTreeNode {
 
 export interface BranchTreeNode {
   name: string;
+  commitTitle?: string;
+  commitShortId?: string;
   pipeline?: Pipeline;
   error?: string;
 }

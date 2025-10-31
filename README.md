@@ -7,6 +7,11 @@ A terminal-based GitLab pipeline status monitor that displays projects, branches
 - 🌳 **Tree View**: Hierarchical display of GitLab servers → Projects → Branches → Pipeline Status
 - 📁 **Group Support**: Monitor entire GitLab groups (all projects in a group) or individual projects
 - 🔄 **Auto-refresh**: Configurable automatic refresh interval
+- 📊 **Detailed Information**: For each branch/pipeline see:
+  - Color-coded status badges (SUCCESS, FAILED, RUNNING, etc.)
+  - Last commit message and commit ID
+  - Clickable URLs to projects and pipelines
+  - Relative timestamps (e.g., "2 hours ago")
 - 🎨 **Color-coded Status**: Visual pipeline status indicators
   - ✓ Success (green)
   - ✗ Failed (red)
@@ -15,6 +20,7 @@ A terminal-based GitLab pipeline status monitor that displays projects, branches
   - ⊘ Canceled (magenta)
   - ⊝ Skipped (gray)
   - ⊙ Manual (cyan)
+- 🖱️ **Clickable URLs**: Click on project and pipeline URLs in supported terminals
 - 🖥️ **Terminal UI**: Keyboard navigation with scrolling support
 - 🔌 **Multi-server Support**: Monitor multiple GitLab instances simultaneously
 - ⚡ **Fast**: Parallel API requests for optimal performance
@@ -158,21 +164,32 @@ GitLab Pipeline Status Monitor
 
 📡 GitLab Main
 ├── 📦 my-awesome-project (group/my-awesome-project)
-│   ├── ✓ main [success]
-│   ├── ⏳ feature/new-feature [running]
-│   └── ✗ hotfix/bug-123 [failed]
+│   🔗 https://gitlab.com/group/my-awesome-project
+│   ├── ✓ main  SUCCESS
+│   │   └─ a1b2c3d: Fix authentication bug in login module
+│   │   └─ 🔗 https://gitlab.com/group/my-awesome-project/-/pipelines/123456
+│   │      ⏰ 2 hours ago
+│   ├── ⏳ feature/new-feature  RUNNING
+│   │   └─ e4f5g6h: Add new dashboard component
+│   │   └─ 🔗 https://gitlab.com/group/my-awesome-project/-/pipelines/123457
+│   │      ⏰ 15 minutes ago
+│   └── ✗ hotfix/bug-123  FAILED
+│       └─ i7j8k9l: Quick fix for production issue
+│       └─ 🔗 https://gitlab.com/group/my-awesome-project/-/pipelines/123458
+│          ⏰ 5 minutes ago
 └── 📦 another-project (group/another-project)
-    ├── ✓ main [success]
+    🔗 https://gitlab.com/group/another-project
+    ├── ✓ main  SUCCESS
+    │   └─ m1n2o3p: Update dependencies
+    │   └─ 🔗 https://gitlab.com/group/another-project/-/pipelines/789012
+    │      ⏰ 1 day ago
     └── ⊝ develop [no pipeline]
+        └─ q4r5s6t: Work in progress
 
-📡 Self-Hosted GitLab
-└── 📦 backend-api (team/backend-api)
-    ├── ✓ production [success]
-    ├── ✓ staging [success]
-    └── ⏸ develop [pending]
-
-Last update: 10:30:45 AM | Next update in: 25s | Press 'r' to refresh, 'q' to quit
+Last update: 10:30:45 AM | Next update in: 25s | URLs are clickable | Press 'r' to refresh, 'q' to quit
 ```
+
+**Note**: URLs are clickable in terminals that support OSC 8 hyperlinks (iTerm2, VS Code terminal, Windows Terminal, etc.)
 
 ## Project Structure
 

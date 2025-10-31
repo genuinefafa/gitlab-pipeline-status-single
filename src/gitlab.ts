@@ -136,11 +136,15 @@ export class GitLabClient {
           const pipeline = await this.getLatestPipeline(project.id, branch.name);
           return {
             name: branch.name,
+            commitTitle: branch.commit.title,
+            commitShortId: branch.commit.short_id,
             pipeline: pipeline || undefined,
           };
         } catch (error) {
           return {
             name: branch.name,
+            commitTitle: branch.commit.title,
+            commitShortId: branch.commit.short_id,
             error: (error as Error).message,
           };
         }

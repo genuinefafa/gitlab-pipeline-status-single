@@ -5,6 +5,9 @@ export class UI {
   private screen: blessed.Widgets.Screen;
   private box: blessed.Widgets.BoxElement;
   private statusBar: blessed.Widgets.BoxElement;
+  private filterBox: blessed.Widgets.TextboxElement;
+  private projectFilter: string = '';
+  private onRefreshCallback?: () => void;
 
   constructor() {
     this.screen = blessed.screen({
@@ -45,8 +48,23 @@ export class UI {
       },
     });
 
+    // Filter input box (hidden by default)
+    this.filterBox = blessed.textbox({
+      bottom: 1,
+      left: 0,
+      width: '100%',
+      height: 1,
+      inputOnFocus: true,
+      style: {
+        fg: 'white',
+        bg: 'green',
+      },
+      hidden: true,
+    });
+
     this.screen.append(this.box);
     this.screen.append(this.statusBar);
+    this.screen.append(this.filterBox);
 
     // Key bindings
     this.screen.key(['escape', 'q', 'C-c'], () => {
@@ -56,6 +74,24 @@ export class UI {
     this.screen.key(['r'], () => {
       this.box.setContent('{center}Refreshing...{/center}');
       this.screen.render();
+      if (this.onRefreshCallback) {
+        this.onRefreshCallback();
+      }
+    });
+
+    // Filter projects
+    this.screen.key(['f', '/'], () => {
+      this.showFilterInput();
+    });
+
+    // Clear filter
+    this.screen.key(['c'], () => {
+      if (this.projectFilter) {
+        this.projectFilter = '';
+        if (this.onRefreshCallback) {
+          this.onRefreshCallback();
+        }
+      }
     });
 
     // Enable scrolling
@@ -80,18 +116,67 @@ export class UI {
     });
   }
 
+  setRefreshCallback(callback: () => void) {
+    this.onRefreshCallback = callback;
+  }
+
   render(data: TreeData[], lastUpdate: Date, nextUpdate: Date) {
-    const content = this.buildTree(data);
+    // Apply project filter if active
+    const filteredData = this.filterData(data);
+    const content = this.buildTree(filteredData);
     this.box.setContent(content);
 
     const now = new Date();
     const timeUntilNext = Math.round((nextUpdate.getTime() - now.getTime()) / 1000);
-    const statusContent =
-      ` Last update: ${lastUpdate.toLocaleTimeString()} | ` +
-      `Next update in: ${timeUntilNext}s | ` +
-      `URLs are clickable | Press 'r' to refresh, 'q' to quit`;
+
+    let statusContent = ` Last update: ${lastUpdate.toLocaleTimeString()} | Next update in: ${timeUntilNext}s`;
+
+    if (this.projectFilter) {
+      statusContent += ` | {green-fg}Filter: "${this.projectFilter}"{/green-fg}`;
+    }
+
+    statusContent += ` | f:filter c:clear r:refresh q:quit`;
 
     this.statusBar.setContent(statusContent);
+    this.screen.render();
+  }
+
+  private filterData(data: TreeData[]): TreeData[] {
+    if (!this.projectFilter) {
+      return data;
+    }
+
+    const filterLower = this.projectFilter.toLowerCase();
+
+    return data.map(serverData => ({
+      ...serverData,
+      projects: serverData.projects.filter(project =>
+        project.name.toLowerCase().includes(filterLower) ||
+        project.path.toLowerCase().includes(filterLower)
+      ),
+    })).filter(serverData => serverData.projects.length > 0);
+  }
+
+  private showFilterInput() {
+    this.filterBox.hidden = false;
+    this.filterBox.focus();
+    this.filterBox.setValue(this.projectFilter);
+    this.filterBox.setContent(`Filter projects (Enter to apply, Esc to cancel): ${this.projectFilter}`);
+
+    this.filterBox.readInput((err, value) => {
+      this.filterBox.hidden = true;
+      this.box.focus();
+
+      if (!err && value !== null) {
+        this.projectFilter = value.trim();
+        if (this.onRefreshCallback) {
+          this.onRefreshCallback();
+        }
+      }
+
+      this.screen.render();
+    });
+
     this.screen.render();
   }
 
@@ -125,14 +210,13 @@ export class UI {
           continue;
         }
 
-        // Project line with clickable URL
-        const projectUrl = project.url ? `\u001b]8;;${project.url}\u001b\\${project.url}\u001b]8;;\u001b\\` : '';
+        // Project line with URL
         lines.push(
           `${projectPrefix} {bold}📦 ${project.name}{/bold} {gray-fg}(${project.path}){/gray-fg}`
         );
         if (project.url) {
           const urlIndent = isLastProject ? '    ' : '│   ';
-          lines.push(`${urlIndent}{gray-fg}🔗 ${projectUrl}{/gray-fg}`);
+          lines.push(`${urlIndent}{blue-fg}🔗 ${project.url}{/blue-fg}`);
         }
 
         for (let j = 0; j < project.branches.length; j++) {
@@ -163,10 +247,9 @@ export class UI {
               lines.push(commitLine.length > 120 ? commitLine.substring(0, 117) + '...{/gray-fg}' : commitLine);
             }
 
-            // Pipeline URL (clickable)
+            // Pipeline URL
             if (branch.pipeline.web_url) {
-              const pipelineUrl = `\u001b]8;;${branch.pipeline.web_url}\u001b\\${branch.pipeline.web_url}\u001b]8;;\u001b\\`;
-              lines.push(`${detailIndent}${detailPrefix}  {gray-fg}└─ 🔗 ${pipelineUrl}{/gray-fg}`);
+              lines.push(`${detailIndent}${detailPrefix}  {blue-fg}└─ 🔗 ${branch.pipeline.web_url}{/blue-fg}`);
             }
 
             // Timestamp

@@ -6,11 +6,12 @@ A terminal-based GitLab pipeline status monitor that displays projects, branches
 
 - 🌳 **Tree View**: Hierarchical display of GitLab servers → Projects → Branches → Pipeline Status
 - 📁 **Group Support**: Monitor entire GitLab groups (all projects in a group) or individual projects
+- 🔍 **Project Filter**: Search/filter projects by name or path - essential when monitoring large groups
 - 🔄 **Auto-refresh**: Configurable automatic refresh interval
 - 📊 **Detailed Information**: For each branch/pipeline see:
   - Color-coded status badges (SUCCESS, FAILED, RUNNING, etc.)
   - Last commit message and commit ID
-  - Clickable URLs to projects and pipelines
+  - Direct URLs to projects and pipelines
   - Relative timestamps (e.g., "2 hours ago")
 - 🎨 **Color-coded Status**: Visual pipeline status indicators
   - ✓ Success (green)
@@ -20,7 +21,6 @@ A terminal-based GitLab pipeline status monitor that displays projects, branches
   - ⊘ Canceled (magenta)
   - ⊝ Skipped (gray)
   - ⊙ Manual (cyan)
-- 🖱️ **Clickable URLs**: Click on project and pipeline URLs in supported terminals
 - 🖥️ **Terminal UI**: Keyboard navigation with scrolling support
 - 🔌 **Multi-server Support**: Monitor multiple GitLab instances simultaneously
 - ⚡ **Fast**: Parallel API requests for optimal performance
@@ -150,12 +150,27 @@ npm start       # Run compiled JavaScript
 
 ### Keyboard Controls
 
-- `q` or `Esc` or `Ctrl+C` - Quit the application
-- `r` - Manual refresh
+**Navigation:**
 - `↑`/`k` - Scroll up
 - `↓`/`j` - Scroll down
 - `Page Up` - Scroll up one page
 - `Page Down` - Scroll down one page
+
+**Actions:**
+- `q` or `Esc` or `Ctrl+C` - Quit the application
+- `r` - Manual refresh (re-fetch all data)
+- `f` or `/` - Filter projects (search by name or path)
+- `c` - Clear active filter
+
+**Filtering:**
+When monitoring many projects (especially from groups), you can use the filter to focus on specific projects:
+1. Press `f` or `/` to open the filter input
+2. Type part of a project name or path (case-insensitive)
+3. Press `Enter` to apply the filter
+4. Only matching projects will be displayed
+5. Press `c` to clear the filter and show all projects again
+
+Example: Filter for "backend" to see only projects with "backend" in their name or path.
 
 ## Example Output
 
@@ -186,10 +201,10 @@ GitLab Pipeline Status Monitor
     └── ⊝ develop [no pipeline]
         └─ q4r5s6t: Work in progress
 
-Last update: 10:30:45 AM | Next update in: 25s | URLs are clickable | Press 'r' to refresh, 'q' to quit
+Last update: 10:30:45 AM | Next update in: 25s | f:filter c:clear r:refresh q:quit
 ```
 
-**Note**: URLs are clickable in terminals that support OSC 8 hyperlinks (iTerm2, VS Code terminal, Windows Terminal, etc.)
+**Copy URLs**: Simply select and copy the blue URLs to open them in your browser.
 
 ## Project Structure
 

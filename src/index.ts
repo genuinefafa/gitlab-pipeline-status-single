@@ -12,6 +12,7 @@ class GitLabMonitor {
   private lastUpdate: Date = new Date();
   private nextUpdate: Date = new Date();
   private isRefreshing = false;
+  private cachedData: TreeData[] = [];
 
   constructor(configPath?: string) {
     try {
@@ -28,6 +29,15 @@ class GitLabMonitor {
     console.log('Starting GitLab Pipeline Status Monitor...');
     console.log(`Monitoring ${this.config.servers.length} server(s)`);
     console.log(`Refresh interval: ${this.config.refreshInterval}s\n`);
+
+    // Set up refresh callback for UI (re-render with cached data)
+    this.ui.setRefreshCallback(() => {
+      if (this.cachedData.length > 0) {
+        this.ui.render(this.cachedData, this.lastUpdate, this.nextUpdate);
+      } else {
+        this.refresh();
+      }
+    });
 
     // Initial fetch
     await this.refresh();
@@ -127,6 +137,7 @@ class GitLabMonitor {
         });
       }
 
+      this.cachedData = allData;
       this.lastUpdate = new Date();
       this.ui.render(allData, this.lastUpdate, this.nextUpdate);
     } catch (error) {

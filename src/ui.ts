@@ -23,7 +23,9 @@ export class UI {
       alwaysScroll: true,
       scrollbar: {
         ch: ' ',
-        bg: 'blue',
+        style: {
+          bg: 'blue',
+        },
       },
       keys: true,
       vi: true,

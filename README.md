@@ -5,6 +5,7 @@ A terminal-based GitLab pipeline status monitor that displays projects, branches
 ## Features
 
 - 🌳 **Tree View**: Hierarchical display of GitLab servers → Projects → Branches → Pipeline Status
+- 📁 **Group Support**: Monitor entire GitLab groups (all projects in a group) or individual projects
 - 🔄 **Auto-refresh**: Configurable automatic refresh interval
 - 🎨 **Color-coded Status**: Visual pipeline status indicators
   - ✓ Success (green)
@@ -50,11 +51,11 @@ cp config.example.yaml config.yaml
 
 2. Edit `config.yaml` with your GitLab server details:
 
+### Option 1: Monitor Individual Projects
+
 ```yaml
-# Refresh interval in seconds
 refreshInterval: 30
 
-# GitLab servers configuration
 servers:
   - name: "GitLab Main"
     url: "https://gitlab.com"
@@ -63,22 +64,45 @@ servers:
       # Using project ID
       - id: 12345
         name: "my-project"
-
       # Using project path (recommended)
       - path: "group/project-name"
+```
 
-  - name: "Self-Hosted GitLab"
-    url: "https://gitlab.example.com"
-    token: "your-self-hosted-token"
+### Option 2: Monitor Entire Groups
+
+```yaml
+refreshInterval: 30
+
+servers:
+  - name: "GitLab Production"
+    url: "https://gitlab.com"
+    token: "your-gitlab-token-here"
+    groups:
+      # Monitor all projects in a group
+      - path: "my-organization/production-apps"
+      # Include subgroups too
+      - path: "my-organization/all-projects"
+        includeSubgroups: true
+      # Or use group ID
+      - id: 98765
+```
+
+### Option 3: Mix Both Groups and Projects
+
+```yaml
+refreshInterval: 30
+
+servers:
+  - name: "GitLab Mixed"
+    url: "https://gitlab.com"
+    token: "your-gitlab-token-here"
+    # Monitor specific projects
     projects:
-      - path: "team/backend-api"
-      - path: "team/frontend-app"
-
-# Display options (optional)
-display:
-  recentOnly: false          # Show only recent branches
-  pipelinesPerBranch: 1      # Number of pipelines per branch
-  compact: false             # Compact display mode
+      - path: "team/critical-app"
+    # AND entire groups
+    groups:
+      - path: "team/microservices"
+        includeSubgroups: true
 ```
 
 ### Getting a GitLab Token
@@ -163,7 +187,10 @@ Last update: 10:30:45 AM | Next update in: 25s | Press 'r' to refresh, 'q' to qu
 - `name` - Display name for the server
 - `url` - GitLab instance URL (e.g., https://gitlab.com)
 - `token` - GitLab API token
-- `projects` - Array of projects to monitor
+- `projects` - Array of individual projects to monitor (optional)
+- `groups` - Array of groups to monitor (optional)
+
+**Note:** You must specify at least one of `projects` or `groups`, or both.
 
 ### Project Configuration
 
@@ -171,6 +198,16 @@ Each project can be specified by:
 - `id` - Project ID (numeric)
 - `path` - Project path (e.g., "group/project-name")
 - `name` - Custom display name (optional)
+
+### Group Configuration
+
+Each group can be specified by:
+- `id` - Group ID (numeric)
+- `path` - Group path (e.g., "my-organization/team")
+- `name` - Custom display name (optional)
+- `includeSubgroups` - Include all subgroups and their projects (optional, default: false)
+
+When you specify a group, the monitor will automatically fetch and display all projects within that group.
 
 ### Display Options
 

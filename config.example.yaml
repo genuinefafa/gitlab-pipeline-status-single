@@ -6,6 +6,7 @@ refreshInterval: 30
 
 # GitLab servers configuration
 servers:
+  # Example 1: Monitor individual projects
   - name: "GitLab Main"
     url: "https://gitlab.com"
     token: "your-gitlab-token-here"
@@ -17,12 +18,32 @@ servers:
       # You can also use project path instead of ID
       - path: "group/project-name"
 
+  # Example 2: Monitor entire groups
+  - name: "GitLab Production"
+    url: "https://gitlab.com"
+    token: "your-gitlab-token-here"
+    groups:
+      # Monitor all projects in a group by path
+      - path: "my-organization/production-apps"
+        name: "Production Apps"
+      # Or by group ID
+      - id: 98765
+        name: "Backend Services"
+      # Include subgroups (optional, default: false)
+      - path: "my-organization/all-projects"
+        includeSubgroups: true
+
+  # Example 3: Mix both groups and individual projects
   - name: "GitLab Self-Hosted"
     url: "https://gitlab.example.com"
     token: "your-self-hosted-token"
+    # Monitor specific projects
     projects:
-      - path: "team/backend-api"
-      - path: "team/frontend-app"
+      - path: "team/critical-app"
+    # AND entire groups
+    groups:
+      - path: "team/microservices"
+        includeSubgroups: true
 
 # Display options
 display:

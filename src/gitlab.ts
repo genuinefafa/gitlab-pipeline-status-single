@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { Project, Branch, Pipeline, ProjectConfig } from './types';
+import { Project, Branch, Pipeline, ProjectConfig, GroupConfig } from './types';
 
 export class GitLabClient {
   private client: AxiosInstance;
@@ -74,6 +74,52 @@ export class GitLabClient {
         }
         throw new Error(
           `Failed to fetch pipeline: ${error.response?.status} ${error.response?.statusText}`
+        );
+      }
+      throw error;
+    }
+  }
+
+  async getGroupProjects(config: GroupConfig): Promise<Project[]> {
+    try {
+      const endpoint = config.id
+        ? `/groups/${config.id}/projects`
+        : `/groups/${encodeURIComponent(config.path!)}/projects`;
+
+      const params: any = {
+        per_page: 100,
+        simple: false,
+        order_by: 'name',
+        sort: 'asc',
+      };
+
+      if (config.includeSubgroups) {
+        params.include_subgroups = true;
+      }
+
+      // GitLab API may paginate results, fetch all pages
+      const allProjects: Project[] = [];
+      let page = 1;
+      let hasMorePages = true;
+
+      while (hasMorePages) {
+        const response = await this.client.get<Project[]>(endpoint, {
+          params: { ...params, page },
+        });
+
+        allProjects.push(...response.data);
+
+        // Check if there are more pages
+        const totalPages = response.headers['x-total-pages'];
+        hasMorePages = totalPages && page < parseInt(totalPages, 10);
+        page++;
+      }
+
+      return allProjects;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(
+          `Failed to fetch group projects: ${error.response?.status} ${error.response?.statusText}`
         );
       }
       throw error;

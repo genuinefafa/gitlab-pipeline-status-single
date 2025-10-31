@@ -64,8 +64,41 @@ class GitLabMonitor {
         const client = new GitLabClient(server.url, server.token);
         const projects: ProjectTreeNode[] = [];
 
+        // Collect all project configs from both individual projects and groups
+        const allProjectConfigs = [];
+
+        // Add individual projects
+        if (server.projects && server.projects.length > 0) {
+          allProjectConfigs.push(...server.projects);
+        }
+
+        // Fetch projects from groups
+        if (server.groups && server.groups.length > 0) {
+          for (const groupConfig of server.groups) {
+            try {
+              const groupProjects = await client.getGroupProjects(groupConfig);
+              // Convert fetched projects to ProjectConfig format
+              const projectConfigs = groupProjects.map((project) => ({
+                id: project.id,
+                name: project.name,
+                path: project.path_with_namespace,
+              }));
+              allProjectConfigs.push(...projectConfigs);
+            } catch (error) {
+              // If group fetch fails, add an error entry
+              projects.push({
+                name: groupConfig.name || groupConfig.path || `Group ${groupConfig.id}`,
+                path: groupConfig.path || `Group ID: ${groupConfig.id}`,
+                url: '',
+                branches: [],
+                error: `Failed to fetch group: ${(error as Error).message}`,
+              });
+            }
+          }
+        }
+
         // Fetch all projects in parallel
-        const projectPromises = server.projects.map(async (projectConfig) => {
+        const projectPromises = allProjectConfigs.map(async (projectConfig) => {
           try {
             const data = await client.getProjectPipelineData(projectConfig);
             return {

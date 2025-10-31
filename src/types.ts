@@ -12,13 +12,21 @@ export interface GitLabServer {
   name: string;
   url: string;
   token: string;
-  projects: ProjectConfig[];
+  projects?: ProjectConfig[];
+  groups?: GroupConfig[];
 }
 
 export interface ProjectConfig {
   id?: number;
   path?: string;
   name?: string;
+}
+
+export interface GroupConfig {
+  id?: number;
+  path?: string;
+  name?: string;
+  includeSubgroups?: boolean;
 }
 
 export interface Project {

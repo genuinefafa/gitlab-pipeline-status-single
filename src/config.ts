@@ -16,8 +16,15 @@ export function loadConfig(configPath: string = 'config.yaml'): Config {
       if (!server.url || !server.token) {
         throw new Error(`Server "${server.name}" missing url or token`);
       }
-      if (!server.projects || server.projects.length === 0) {
-        throw new Error(`Server "${server.name}" has no projects configured`);
+
+      const hasProjects = server.projects && server.projects.length > 0;
+      const hasGroups = server.groups && server.groups.length > 0;
+
+      if (!hasProjects && !hasGroups) {
+        throw new Error(
+          `Server "${server.name}" has no projects or groups configured. ` +
+          'Please specify at least one project or group.'
+        );
       }
     }
 

@@ -1,0 +1,34 @@
+# GitLab Pipeline Status Monitor Configuration
+# Copy this file to config.yaml and fill in your details
+
+# Refresh interval in seconds
+refreshInterval: 30
+
+# GitLab servers configuration
+servers:
+  - name: "GitLab Main"
+    url: "https://gitlab.com"
+    token: "your-gitlab-token-here"
+    projects:
+      - id: 12345
+        name: "my-project"
+      - id: 67890
+        name: "another-project"
+      # You can also use project path instead of ID
+      - path: "group/project-name"
+
+  - name: "GitLab Self-Hosted"
+    url: "https://gitlab.example.com"
+    token: "your-self-hosted-token"
+    projects:
+      - path: "team/backend-api"
+      - path: "team/frontend-app"
+
+# Display options
+display:
+  # Show only branches with recent activity (default: false)
+  recentOnly: false
+  # Number of pipelines to show per branch (default: 1)
+  pipelinesPerBranch: 1
+  # Compact mode (less spacing, default: false)
+  compact: false

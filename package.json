@@ -1,0 +1,33 @@
+{
+  "name": "gitlab-pipeline-status",
+  "version": "1.0.0",
+  "description": "GitLab pipeline status monitor with tree view",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "watch": "tsc -w"
+  },
+  "keywords": [
+    "gitlab",
+    "pipeline",
+    "monitoring",
+    "ci/cd"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "blessed": "^0.1.81",
+    "js-yaml": "^4.1.0",
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "@types/blessed": "^0.1.25",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.3.2"
+  }
+}

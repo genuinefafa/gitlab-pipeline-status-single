@@ -37,10 +37,7 @@ cd gitlab-pipeline-status-single
 npm install
 ```
 
-3. Build the project:
-```bash
-npm run build
-```
+**Note:** The TypeScript code will be automatically compiled when you run `npm start`.
 
 ## Configuration
 
@@ -114,22 +111,35 @@ servers:
 
 ## Usage
 
-### Run the monitor:
+### Production mode (recommended):
 
 ```bash
 npm start
 ```
 
-Or with a custom config file:
+This will automatically compile TypeScript to JavaScript and run the application.
+
+With a custom config file:
 
 ```bash
 npm start path/to/custom-config.yaml
 ```
 
-### Development mode:
+### Development mode (faster startup):
 
 ```bash
 npm run dev
+```
+
+Runs directly from TypeScript without compiling (uses `ts-node`).
+
+### Manual build:
+
+If you prefer to build separately:
+
+```bash
+npm run build   # Compile TypeScript
+npm start       # Run compiled JavaScript
 ```
 
 ### Keyboard Controls

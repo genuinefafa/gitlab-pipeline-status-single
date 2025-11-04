@@ -153,27 +153,27 @@ app.get('/api/pipelines', async (req: Request, res: Response) => {
 
   try {
     let data: TreeData[] | null = null;
+    let duration: number | undefined;
 
-    // If includeJobs is requested, fetch fresh data to ensure jobs are present
-    if (includeJobs) {
-      data = await fetchPipelineData(true);
-    } else {
-      // Try to get from cache first
-      data = cache.get(force);
+    // Try to get from cache first
+    data = cache.get(force, includeJobs);
 
-      if (!data) {
-        // Fetch fresh data
-        data = await fetchPipelineData(false);
-        cache.set(data);
-      }
+    if (!data) {
+      // Fetch fresh data
+      const startTime = Date.now();
+      data = await fetchPipelineData(includeJobs);
+      duration = Date.now() - startTime;
+      cache.set(data, includeJobs, duration);
     }
 
-    const cacheAge = cache.getAge();
+    const cacheAge = cache.getAge(includeJobs);
+    const cacheDuration = cache.getDuration(includeJobs);
 
     res.json({
       data,
       cached: !force && cacheAge !== null,
       cacheAge,
+      cacheDuration,
       includeJobs,
       timestamp: Date.now(),
     });
@@ -183,6 +183,158 @@ app.get('/api/pipelines', async (req: Request, res: Response) => {
       error: 'Failed to fetch pipeline data',
       message: (error as Error).message,
     });
+  }
+});
+
+/**
+ * Server-sent events endpoint for streaming progress
+ */
+app.get('/api/pipelines/stream', async (req: Request, res: Response) => {
+  const force = req.query.force === 'true';
+  const includeJobs = req.query.includeJobs === 'true';
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const send = (event: string, data: any) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    // Check cache first
+    let data = cache.get(force, includeJobs);
+
+    if (data) {
+      send('complete', { data, cached: true, cacheAge: cache.getAge(includeJobs), cacheDuration: cache.getDuration(includeJobs) });
+      res.end();
+      return;
+    }
+
+    // Fetch fresh data with progress
+    const startTime = Date.now();
+    const allData: TreeData[] = [];
+    let totalProjects = 0;
+    let processedProjects = 0;
+
+    for (const server of config.servers) {
+      send('progress', { message: `Connecting to ${server.name}...`, stage: 'init' });
+
+      const client = new GitLabClient(server.url, server.token);
+      const projects: ProjectTreeNode[] = [];
+      const allProjectConfigs: ProjectConfig[] = [];
+
+      if (server.projects && server.projects.length > 0) {
+        allProjectConfigs.push(...server.projects);
+      }
+
+      if (server.groups && server.groups.length > 0) {
+        send('progress', { message: `Fetching groups from ${server.name}...`, stage: 'groups' });
+        for (const groupConfig of server.groups) {
+          try {
+            const groupProjects = await client.getGroupProjects(groupConfig);
+            const projectConfigs = groupProjects.map((project) => ({
+              id: project.id,
+              name: project.name,
+              path: project.path_with_namespace,
+            }));
+            allProjectConfigs.push(...projectConfigs);
+          } catch (error) {
+            projects.push({
+              name: groupConfig.name || groupConfig.path || `Group ${groupConfig.id}`,
+              path: groupConfig.path || `Group ID: ${groupConfig.id}`,
+              url: '',
+              branches: [],
+              error: `Failed to fetch group: ${(error as Error).message}`,
+            });
+          }
+        }
+      }
+
+      totalProjects += allProjectConfigs.length;
+      send('progress', { 
+        message: `Found ${allProjectConfigs.length} projects in ${server.name}`, 
+        stage: 'projects',
+        total: totalProjects 
+      });
+
+      for (const projectConfig of allProjectConfigs) {
+        try {
+          const project = await client.getProject(projectConfig);
+
+          if (isProjectExcluded(project.name, project.path_with_namespace)) {
+            totalProjects--;
+            continue;
+          }
+
+          processedProjects++;
+          send('progress', {
+            message: `Processing ${project.name} (${processedProjects}/${totalProjects})`,
+            stage: 'fetching',
+            current: processedProjects,
+            total: totalProjects,
+          });
+
+          const branches = await client.getBranches(project.id);
+          const branchData = await Promise.all(
+            branches.map(async (branch) => {
+              try {
+                const pipeline = await client.getLatestPipeline(project.id, branch.name);
+
+                if (includeJobs && pipeline) {
+                  const jobs = await client.getPipelineJobs(project.id, pipeline.id);
+                  pipeline.jobs = jobs;
+                }
+
+                return {
+                  name: branch.name,
+                  commitTitle: branch.commit.title,
+                  commitShortId: branch.commit.short_id,
+                  pipeline: pipeline || undefined,
+                };
+              } catch (error) {
+                return {
+                  name: branch.name,
+                  error: (error as Error).message,
+                };
+              }
+            })
+          );
+
+          projects.push({
+            name: project.name,
+            path: project.path_with_namespace,
+            url: project.web_url,
+            branches: branchData,
+          });
+        } catch (error) {
+          processedProjects++;
+          projects.push({
+            name: projectConfig.name || projectConfig.path || `Project ${projectConfig.id}`,
+            path: projectConfig.path || `Project ID: ${projectConfig.id}`,
+            url: '',
+            branches: [],
+            error: (error as Error).message,
+          });
+        }
+      }
+
+      allData.push({
+        serverName: server.name,
+        projects,
+      });
+    }
+
+    // Save to cache
+    const duration = Date.now() - startTime;
+    cache.set(allData, includeJobs, duration);
+
+    send('complete', { data: allData, cached: false, cacheDuration: duration / 1000 });
+    res.end();
+  } catch (error) {
+    send('error', { message: (error as Error).message });
+    res.end();
   }
 });
 
@@ -423,14 +575,15 @@ app.get('/', (req: Request, res: Response) => {
     }
 
     .project-graph {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      display: flex;
+      flex-direction: column;
       gap: 1rem;
     }
 
     .graph-node {
       padding: 1rem;
       border: 1px solid #ddd;
+      width: 100%;
     }
 
     .graph-node.status-success {
@@ -554,8 +707,145 @@ app.get('/', (req: Request, res: Response) => {
     let currentView = 'list';
     let cachedData = null;
 
+    // Initialize view from URL hash
+    function initializeView() {
+      const hash = window.location.hash.substring(1); // Remove #
+      if (hash === 'graph' || hash === 'list') {
+        currentView = hash;
+        document.querySelectorAll('.view-toggle button').forEach(btn => {
+          btn.classList.remove('active');
+        });
+        document.querySelector('[onclick*="' + hash + '"]').classList.add('active');
+        
+        if (hash === 'list') {
+          document.getElementById('list-view').classList.add('active');
+          document.getElementById('graph-view').classList.remove('active');
+        } else {
+          document.getElementById('list-view').classList.remove('active');
+          document.getElementById('graph-view').classList.add('active');
+        }
+      }
+    }
+
+    // Handle browser back/forward
+    window.addEventListener('hashchange', () => {
+      initializeView();
+      if (cachedData) {
+        renderData(cachedData);
+      }
+    });
+
+    // Standard GitLab stage order
+    const STAGE_ORDER = [
+      '.pre',
+      'build',
+      'test',
+      'deploy',
+      'staging',
+      'production',
+      'cleanup',
+      '.post'
+    ];
+
+    function sortJobs(jobs) {
+      if (!jobs || jobs.length === 0) return [];
+      
+      return jobs.slice().sort((a, b) => {
+        const aIndex = STAGE_ORDER.indexOf(a.stage.toLowerCase());
+        const bIndex = STAGE_ORDER.indexOf(b.stage.toLowerCase());
+        
+        // If both stages are in the order list, sort by that
+        if (aIndex !== -1 && bIndex !== -1) {
+          return aIndex - bIndex;
+        }
+        
+        // If only one is in the list, prioritize it
+        if (aIndex !== -1) return -1;
+        if (bIndex !== -1) return 1;
+        
+        // Otherwise, sort alphabetically by stage, then by job name
+        const stageCmp = a.stage.localeCompare(b.stage);
+        return stageCmp !== 0 ? stageCmp : a.name.localeCompare(b.name);
+      });
+    }
+
+    function renderPipelineSVG(pipeline) {
+      if (!pipeline || !pipeline.jobs || pipeline.jobs.length === 0) {
+        return '<span class="pipeline-status status-none" title="No pipeline">No pipeline</span>';
+      }
+
+      const sorted = sortJobs(pipeline.jobs);
+      
+      // Group by stage
+      const stages = {};
+      sorted.forEach(job => {
+        if (!stages[job.stage]) {
+          stages[job.stage] = [];
+        }
+        stages[job.stage].push(job);
+      });
+
+      const stageNames = Object.keys(stages);
+      const stageWidth = 120;
+      const stageHeight = 60;
+      const jobHeight = 35;
+      const padding = 20;
+      
+      let maxJobsInStage = 0;
+      stageNames.forEach(stage => {
+        if (stages[stage].length > maxJobsInStage) {
+          maxJobsInStage = stages[stage].length;
+        }
+      });
+      
+      const width = (stageNames.length * stageWidth) + (padding * 2);
+      const height = (maxJobsInStage * jobHeight) + (padding * 2) + 30;
+      
+      let svg = '<svg width="' + width + '" height="' + height + '" style="border:1px solid #ddd; background:#fafafa; margin:10px 0">';
+      
+      // Render connections
+      for (let i = 0; i < stageNames.length - 1; i++) {
+        const x1 = (i * stageWidth) + stageWidth + padding;
+        const x2 = ((i + 1) * stageWidth) + padding;
+        const y = (height / 2);
+        svg += '<line x1="' + x1 + '" y1="' + y + '" x2="' + x2 + '" y2="' + y + '" stroke="#ccc" stroke-width="2" />';
+      }
+      
+      // Render stages and jobs
+      stageNames.forEach((stageName, stageIdx) => {
+        const x = (stageIdx * stageWidth) + padding;
+        const jobs = stages[stageName];
+        
+        // Stage label
+        svg += '<text x="' + (x + stageWidth/2) + '" y="' + (padding - 5) + '" text-anchor="middle" font-size="12" font-weight="bold">' + stageName + '</text>';
+        
+        // Jobs in this stage
+        jobs.forEach((job, jobIdx) => {
+          const y = padding + 20 + (jobIdx * jobHeight);
+          
+          let color = '#ccc';
+          if (job.status === 'success') color = '#16a34a';
+          else if (job.status === 'failed') color = '#dc2626';
+          else if (job.status === 'running') color = '#2563eb';
+          else if (job.status === 'pending') color = '#facc15';
+          else if (job.status === 'canceled') color = '#6b7280';
+          else if (job.status === 'skipped') color = '#9ca3af';
+          
+          svg += '<rect x="' + x + '" y="' + y + '" width="' + (stageWidth - 10) + '" height="' + (jobHeight - 5) + '" fill="' + color + '" rx="4" />';
+          svg += '<text x="' + (x + (stageWidth - 10)/2) + '" y="' + (y + (jobHeight - 5)/2 + 4) + '" text-anchor="middle" font-size="11" fill="white">' + job.name + '</text>';
+          
+          svg += '<title>' + job.stage + ': ' + job.name + ' (' + job.status + ')</title>';
+        });
+      });
+      
+      svg += '</svg>';
+      
+      return '<a href="' + pipeline.web_url + '" target="_blank" style="display:block">' + svg + '</a>';
+    }
+
     function switchView(view) {
       currentView = view;
+      window.location.hash = view;
       
       // Update button states
       document.querySelectorAll('.view-toggle button').forEach(btn => {
@@ -577,46 +867,72 @@ app.get('/', (req: Request, res: Response) => {
     }
 
     async function loadData(force = false) {
-       const cacheInfo = document.getElementById('cache-info');
-       const refreshBtn = document.getElementById('refresh-btn');
-     
-       refreshBtn.disabled = true;
-     
-       // Show loading spinner
-       const listView = document.getElementById('list-view');
-       const graphView = document.getElementById('graph-view');
-      const loadingHTML = currentView === 'graph'
-        ? '<div class="loading"><div class="spinner"></div><div>Loading graph view (includes detailed jobs) ...</div></div>'
-        : '<div class="loading"><div class="spinner"></div><div>Loading pipeline data...</div></div>';
-     
-       if (currentView === 'list') {
-         listView.innerHTML = loadingHTML;
-       } else {
-         graphView.innerHTML = loadingHTML;
-       }
+      const cacheInfo = document.getElementById('cache-info');
+      const refreshBtn = document.getElementById('refresh-btn');
+      
+      refreshBtn.disabled = true;
+      
+      // Show loading with progress
+      const listView = document.getElementById('list-view');
+      const graphView = document.getElementById('graph-view');
+      const targetView = currentView === 'list' ? listView : graphView;
+      
+      const includeJobs = currentView === 'graph';
+      
+      // Check if we have cache to determine if this is a first load
+      const checkResponse = await fetch('/api/pipelines?includeJobs=' + includeJobs);
+      const checkData = await checkResponse.json();
+      const isFirstLoad = !checkData.cached;
+      
+      if (isFirstLoad && !force) {
+        targetView.innerHTML = '<div class="loading"><div class="spinner"></div><div id="progress-message">⚠️ Primera carga sin caché, esto puede demorar varios segundos...</div></div>';
+      } else {
+        targetView.innerHTML = '<div class="loading"><div class="spinner"></div><div id="progress-message">Initializing...</div></div>';
+      }
       
       try {
-        const includeJobs = currentView === 'graph';
-        const response = await fetch('/api/pipelines?force=' + force + '&includeJobs=' + includeJobs);
-        const result = await response.json();
+        const eventSource = new EventSource('/api/pipelines/stream?force=' + force + '&includeJobs=' + includeJobs);
         
-        if (result.error) {
-          document.getElementById('list-view').innerHTML = '<div class="error-message">Error: ' + result.message + '</div>';
-          return;
-        }
+        eventSource.addEventListener('progress', (e) => {
+          const data = JSON.parse(e.data);
+          const progressEl = document.getElementById('progress-message');
+          if (progressEl) {
+            progressEl.textContent = data.message;
+          }
+        });
         
-        // Update cache info
-        if (result.cached && result.cacheAge !== null) {
-          cacheInfo.textContent = 'Cached (' + result.cacheAge + 's ago)';
-        } else {
-          cacheInfo.textContent = 'Fresh data';
-        }
+        eventSource.addEventListener('complete', (e) => {
+          const result = JSON.parse(e.data);
+          eventSource.close();
+          
+          // Update cache info
+          if (result.cached && result.cacheAge !== null) {
+            let cacheText = 'Cached (' + result.cacheAge + 's ago)';
+            if (result.cacheDuration) {
+              cacheText += ' - último refrescó demoró ' + result.cacheDuration.toFixed(1) + 's';
+            }
+            cacheInfo.textContent = cacheText;
+          } else {
+            let cacheText = 'Fresh data';
+            if (result.cacheDuration) {
+              cacheText += ' - fetch demoró ' + result.cacheDuration.toFixed(1) + 's';
+            }
+            cacheInfo.textContent = cacheText;
+          }
+          
+          cachedData = result.data;
+          renderData(result.data);
+          refreshBtn.disabled = false;
+        });
         
-        cachedData = result.data;
-        renderData(result.data);
+        eventSource.addEventListener('error', (e) => {
+          eventSource.close();
+          targetView.innerHTML = '<div class="error-message">Failed to load data. Please try again.</div>';
+          refreshBtn.disabled = false;
+        });
+        
       } catch (error) {
-        document.getElementById('list-view').innerHTML = '<div class="error-message">Failed to load data: ' + error.message + '</div>';
-      } finally {
+        targetView.innerHTML = '<div class="error-message">Failed to load data: ' + error.message + '</div>';
         refreshBtn.disabled = false;
       }
     }
@@ -771,27 +1087,15 @@ app.get('/', (req: Request, res: Response) => {
                         <a href="\${project.url}" target="_blank">\${project.name}</a>
                       </div>
                       <div class="graph-node-branches">
-                        \${project.branches.slice(0, 5).map(branch => \`
+                        \${project.branches.slice(0, 3).map(branch => \`
                           <div class="graph-branch">
                             <div class="graph-branch-name">\${branch.name}</div>
-                            \${branch.pipeline ? 
-                              '<a href="' + branch.pipeline.web_url + '" target="_blank" class="pipeline-status status-' + branch.pipeline.status + '" title="Pipeline status: ' + branch.pipeline.status + '">' + 
-                              branch.pipeline.status + 
-                              '</a>' :
-                              '<span class="pipeline-status status-none" title="No pipeline for this branch">No pipeline</span>'
-                            }
-                            \${branch.pipeline && branch.pipeline.jobs && branch.pipeline.jobs.length > 0 ?
-                              '<div class="pipeline-jobs">' +
-                              branch.pipeline.jobs.map(job => 
-                                '<span class="job-badge ' + job.status + '" title="' + job.stage + ': ' + job.status + '">' + job.name + '</span>'
-                              ).join('') +
-                              '</div>' : ''
-                            }
+                            \${branch.pipeline ? renderPipelineSVG(branch.pipeline) : '<span class="pipeline-status status-none" title="No pipeline">No pipeline</span>'}
                           </div>
                         \`).join('')}
-                        \${project.branches.length > 5 ? 
+                        \${project.branches.length > 3 ? 
                           '<div style="font-size: 0.8rem; color: #666; margin-top: 0.5rem;">+ ' + 
-                          (project.branches.length - 5) + ' more branches</div>' : 
+                          (project.branches.length - 3) + ' more branches</div>' : 
                           ''
                         }
                       </div>

@@ -3,12 +3,14 @@ import * as path from 'path';
 import { TreeData } from './types';
 
 const CACHE_DIR = path.join(process.cwd(), '.cache');
-const CACHE_FILE = path.join(CACHE_DIR, 'pipeline-data.json');
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes default
+const CACHE_FILE_BASE = path.join(CACHE_DIR, 'pipeline-data.json');
+const CACHE_FILE_JOBS = path.join(CACHE_DIR, 'pipeline-data-jobs.json');
+const CACHE_DURATION = 10 * 1000; // 10 seconds
 
 interface CacheData {
   timestamp: number;
   data: TreeData[];
+  duration?: number; // Duration in milliseconds for the fetch operation
 }
 
 export class CacheManager {
@@ -22,17 +24,19 @@ export class CacheManager {
   /**
    * Get cached data if it exists and is not expired
    */
-  get(force: boolean = false): TreeData[] | null {
+  get(force: boolean = false, includeJobs: boolean = false): TreeData[] | null {
     if (force) {
       return null;
     }
 
+    const cacheFile = includeJobs ? CACHE_FILE_JOBS : CACHE_FILE_BASE;
+
     try {
-      if (!fs.existsSync(CACHE_FILE)) {
+      if (!fs.existsSync(cacheFile)) {
         return null;
       }
 
-      const content = fs.readFileSync(CACHE_FILE, 'utf-8');
+      const content = fs.readFileSync(cacheFile, 'utf-8');
       const cached: CacheData = JSON.parse(content);
 
       const age = Date.now() - cached.timestamp;
@@ -51,14 +55,17 @@ export class CacheManager {
   /**
    * Save data to cache
    */
-  set(data: TreeData[]): void {
+  set(data: TreeData[], includeJobs: boolean = false, duration?: number): void {
+    const cacheFile = includeJobs ? CACHE_FILE_JOBS : CACHE_FILE_BASE;
+
     try {
       const cacheData: CacheData = {
         timestamp: Date.now(),
         data,
+        duration,
       };
 
-      fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2), 'utf-8');
+      fs.writeFileSync(cacheFile, JSON.stringify(cacheData, null, 2), 'utf-8');
     } catch (error) {
       console.error('Error writing cache:', error);
     }
@@ -69,8 +76,11 @@ export class CacheManager {
    */
   clear(): void {
     try {
-      if (fs.existsSync(CACHE_FILE)) {
-        fs.unlinkSync(CACHE_FILE);
+      if (fs.existsSync(CACHE_FILE_BASE)) {
+        fs.unlinkSync(CACHE_FILE_BASE);
+      }
+      if (fs.existsSync(CACHE_FILE_JOBS)) {
+        fs.unlinkSync(CACHE_FILE_JOBS);
       }
     } catch (error) {
       console.error('Error clearing cache:', error);
@@ -80,16 +90,38 @@ export class CacheManager {
   /**
    * Get cache age in seconds, or null if no cache exists
    */
-  getAge(): number | null {
+  getAge(includeJobs: boolean = false): number | null {
+    const cacheFile = includeJobs ? CACHE_FILE_JOBS : CACHE_FILE_BASE;
+
     try {
-      if (!fs.existsSync(CACHE_FILE)) {
+      if (!fs.existsSync(cacheFile)) {
         return null;
       }
 
-      const content = fs.readFileSync(CACHE_FILE, 'utf-8');
+      const content = fs.readFileSync(cacheFile, 'utf-8');
       const cached: CacheData = JSON.parse(content);
 
       return Math.floor((Date.now() - cached.timestamp) / 1000);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Get cache duration (fetch time) in seconds, or null if no cache exists or no duration recorded
+   */
+  getDuration(includeJobs: boolean = false): number | null {
+    const cacheFile = includeJobs ? CACHE_FILE_JOBS : CACHE_FILE_BASE;
+
+    try {
+      if (!fs.existsSync(cacheFile)) {
+        return null;
+      }
+
+      const content = fs.readFileSync(cacheFile, 'utf-8');
+      const cached: CacheData = JSON.parse(content);
+
+      return cached.duration ? cached.duration / 1000 : null;
     } catch (error) {
       return null;
     }

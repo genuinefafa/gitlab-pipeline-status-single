@@ -68,32 +68,30 @@
 
   <nav>
     <button hx-get="/api/pipelines?includeJobs=false" 
-            hx-target="#content" 
-            hx-swap="innerHTML"
-            data-view="list"
+            hx-target="#content"
             _="on htmx:beforeRequest
-                 put '<div class=loading><div class=spinner></div><p>Cargando pipelines...</p></div>' into #content
+                 put '<div class=loading><div class=spinner></div><p>Cargando pipelines...</p></div>' 
+                 into #content
                on htmx:afterRequest
                  call renderList(event.detail.xhr.response)">
-      Lista
+      📋 Lista
     </button>
     
     <button hx-get="/api/pipelines?includeJobs=true" 
-            hx-target="#content" 
-            hx-swap="innerHTML"
-            data-view="graph"
+            hx-target="#content"
             _="on htmx:beforeRequest
-                 put '<div class=loading><div class=spinner></div><p>Cargando pipelines con jobs...</p></div>' into #content
+                 put '<div class=loading><div class=spinner></div><p>Cargando pipelines con jobs...</p></div>' 
+                 into #content
                on htmx:afterRequest
                  call renderGraph(event.detail.xhr.response)">
-      Gráfico
+      📊 Gráfico
     </button>
     
     <button hx-get="/api/pipelines?force=true&includeJobs=false" 
-            hx-target="#content" 
-            hx-swap="innerHTML"
+            hx-target="#content"
             _="on htmx:beforeRequest
-                 put '<div class=loading><div class=spinner></div><p>Refrescando...</p></div>' into #content
+                 put '<div class=loading><div class=spinner></div><p>Refrescando...</p></div>' 
+                 into #content
                on htmx:afterRequest
                  call renderList(event.detail.xhr.response)">
       🔄 Refresh

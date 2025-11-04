@@ -1,8 +1,21 @@
-// GitLab Pipeline Monitor - Client-side rendering
-// Backend = JSON data only | Frontend = Rendering
+/**
+ * GitLab Pipeline Monitor - Client-side rendering
+ * 
+ * Architecture:
+ * - Backend (Express API): Returns JSON data only
+ * - Frontend (htmx + hyperscript): Handles HTTP and events
+ * - This module: Pure rendering functions (data → HTML)
+ * 
+ * Flow:
+ * 1. hyperscript triggers htmx requests
+ * 2. htmx fetches JSON from API
+ * 3. hyperscript calls renderList/renderGraph
+ * 4. Functions here transform JSON to HTML
+ */
 
 /**
- * Update cache info in header
+ * Update cache info display in header
+ * @param {Object} response - API response with cache metadata
  */
 function updateCacheInfo(response) {
   const cacheInfo = document.getElementById('cache-info');
@@ -23,7 +36,8 @@ function updateCacheInfo(response) {
 }
 
 /**
- * Render list view - called by hyperscript
+ * Render list view - called by hyperscript after htmx request
+ * @param {string} responseText - Raw JSON response from API
  */
 window.renderList = function (responseText) {
   const response = JSON.parse(responseText);
@@ -34,7 +48,8 @@ window.renderList = function (responseText) {
 };
 
 /**
- * Render graph view - called by hyperscript
+ * Render graph view with pipelines - called by hyperscript after htmx request
+ * @param {string} responseText - Raw JSON response from API (with jobs)
  */
 window.renderGraph = function (responseText) {
   const response = JSON.parse(responseText);

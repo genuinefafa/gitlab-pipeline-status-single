@@ -35,6 +35,10 @@ function updateCacheInfo(response) {
   }
 }
 
+// ============================================================================
+// PUBLIC API - Called by hyperscript from HTML
+// ============================================================================
+
 /**
  * Render list view - called by hyperscript after htmx request
  * @param {string} responseText - Raw JSON response from API
@@ -59,8 +63,14 @@ window.renderGraph = function (responseText) {
   document.getElementById('content').innerHTML = html;
 };
 
+// ============================================================================
+// HTML BUILDERS - Pure functions: Data → HTML
+// ============================================================================
+
 /**
- * Build list view HTML
+ * Build list view HTML (table-based)
+ * @param {Array} servers - Server data from API
+ * @returns {string} HTML string
  */
 function buildListHTML(servers) {
   let html = '';
@@ -98,7 +108,9 @@ function buildListHTML(servers) {
 }
 
 /**
- * Build graph view HTML
+ * Build graph view HTML (article-based with SVG pipelines)
+ * @param {Array} servers - Server data from API (must include jobs)
+ * @returns {string} HTML string
  */
 function buildGraphHTML(servers) {
   let html = '';
@@ -144,8 +156,14 @@ function buildGraphHTML(servers) {
   return html;
 }
 
+// ============================================================================
+// COMPONENT RENDERERS - Reusable HTML components
+// ============================================================================
+
 /**
- * Render status badge
+ * Render status badge with emoji
+ * @param {string} status - Pipeline status (success, failed, running, etc.)
+ * @returns {string} HTML mark element
  */
 function renderStatusBadge(status) {
   const statusText = status === 'none' ? 'No Pipeline' : status.toUpperCase();
@@ -154,6 +172,9 @@ function renderStatusBadge(status) {
 
 /**
  * Render pipeline SVG (GitLab-style visualization)
+ * Creates horizontal stage-based diagram with colored job rectangles
+ * @param {Object} pipeline - Pipeline object with jobs array
+ * @returns {string} SVG HTML string
  */
 function renderPipelineSVG(pipeline) {
   if (!pipeline.jobs || pipeline.jobs.length === 0) {

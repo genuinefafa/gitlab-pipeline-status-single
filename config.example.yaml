@@ -4,6 +4,15 @@
 # Refresh interval in seconds
 refreshInterval: 30
 
+# Projects to exclude (optional)
+# List project names or paths that should be excluded from monitoring
+excludeProjects:
+  - "general"
+  - "dockerconfig"
+  - "pipelines"
+  # You can use full paths too
+  # - "group/unwanted-project"
+
 # GitLab servers configuration
 servers:
   # Example 1: Monitor individual projects

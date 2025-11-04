@@ -1,6 +1,7 @@
 export interface Config {
   refreshInterval: number;
   servers: GitLabServer[];
+  excludeProjects?: string[];
   display?: {
     recentOnly?: boolean;
     pipelinesPerBranch?: number;

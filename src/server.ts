@@ -19,6 +19,23 @@ try {
 }
 
 /**
+ * Check if a project should be excluded
+ */
+function isProjectExcluded(projectName: string, projectPath: string): boolean {
+  if (!config.excludeProjects || config.excludeProjects.length === 0) {
+    return false;
+  }
+  
+  const lowerName = projectName.toLowerCase();
+  const lowerPath = projectPath.toLowerCase();
+  
+  return config.excludeProjects.some(excluded => {
+    const lowerExcluded = excluded.toLowerCase();
+    return lowerName.includes(lowerExcluded) || lowerPath.includes(lowerExcluded);
+  });
+}
+
+/**
  * Fetch fresh pipeline data from GitLab
  */
 async function fetchPipelineData(): Promise<TreeData[]> {
@@ -62,6 +79,12 @@ async function fetchPipelineData(): Promise<TreeData[]> {
     const projectPromises = allProjectConfigs.map(async (projectConfig) => {
       try {
         const project = await client.getProject(projectConfig);
+        
+        // Skip excluded projects
+        if (isProjectExcluded(project.name, project.path_with_namespace)) {
+          return null;
+        }
+        
         const branches = await client.getBranches(project.id);
 
         const branchPromises = branches.map(async (branch) => {
@@ -107,7 +130,10 @@ async function fetchPipelineData(): Promise<TreeData[]> {
       }
     });
 
-    projects.push(...(await Promise.all(projectPromises)));
+    const fetchedProjects = await Promise.all(projectPromises);
+    
+    // Filter out null values (excluded projects)
+    projects.push(...fetchedProjects.filter(p => p !== null));
 
     allData.push({
       serverName: server.name,
@@ -203,8 +229,24 @@ app.get('/', (req: Request, res: Response) => {
     }
     
     .loading {
-      text-align: center;
-      padding: 2rem;
+       text-align: center;
+       padding: 3rem;
+       font-size: 1.1rem;
+     }
+   
+     .spinner {
+       display: inline-block;
+       width: 40px;
+       height: 40px;
+       border: 4px solid #ddd;
+       border-top-color: #2563eb;
+       border-radius: 50%;
+       animation: spin 1s linear infinite;
+       margin-bottom: 1rem;
+     }
+   
+     @keyframes spin {
+       to { transform: rotate(360deg); }
     }
     
     .server-section {
@@ -269,26 +311,49 @@ app.get('/', (req: Request, res: Response) => {
     }
     
     .pipeline-status {
-      padding: 0.25rem 0.5rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      white-space: nowrap;
-      text-decoration: none;
-      display: inline-block;
-    }
-    
-    .status-success { background: #16a34a; color: #fff; }
-    .status-failed { background: #dc2626; color: #fff; }
-    .status-running { background: #2563eb; color: #fff; }
-    .status-pending { background: #ca8a04; color: #fff; }
-    .status-canceled { background: #6b7280; color: #fff; }
-    .status-skipped { background: #6b7280; color: #fff; }
-    .status-manual { background: #9333ea; color: #fff; }
-    .status-created { background: #6b7280; color: #fff; }
-    .status-waiting_for_resource { background: #ea580c; color: #fff; }
-    .status-preparing { background: #ea580c; color: #fff; }
-    .status-none { background: #6b7280; color: #fff; }
+       padding: 0.25rem 0.5rem;
+       font-size: 0.75rem;
+       font-weight: 600;
+       text-transform: uppercase;
+       white-space: nowrap;
+       text-decoration: none;
+       display: inline-flex;
+       align-items: center;
+       gap: 0.25rem;
+     }
+   
+     .status-success { background: #16a34a; color: #fff; }
+     .status-success::before { content: '🟢'; }
+   
+     .status-failed { background: #dc2626; color: #fff; }
+     .status-failed::before { content: '🔴'; }
+   
+     .status-running { background: #2563eb; color: #fff; }
+     .status-running::before { content: '🔵'; }
+   
+     .status-pending { background: #ca8a04; color: #fff; }
+     .status-pending::before { content: '🟡'; }
+   
+     .status-canceled { background: #6b7280; color: #fff; }
+     .status-canceled::before { content: '⚫'; }
+   
+     .status-skipped { background: #6b7280; color: #fff; }
+     .status-skipped::before { content: '⚪'; }
+   
+     .status-manual { background: #9333ea; color: #fff; }
+     .status-manual::before { content: '🟣'; }
+   
+     .status-created { background: #6b7280; color: #fff; }
+     .status-created::before { content: '⚫'; }
+   
+     .status-waiting_for_resource { background: #ea580c; color: #fff; }
+     .status-waiting_for_resource::before { content: '🟠'; }
+   
+     .status-preparing { background: #ea580c; color: #fff; }
+     .status-preparing::before { content: '🟠'; }
+   
+     .status-none { background: #6b7280; color: #fff; }
+     .status-none::before { content: '⚪'; }
     
     .error-message {
       color: #dc2626;
@@ -435,7 +500,12 @@ app.get('/', (req: Request, res: Response) => {
   </div>
 
   <div id="stats" class="stats"></div>
-  <div id="list-view" class="list-view active"></div>
+  <div id="list-view" class="list-view active">
+    <div class="loading">
+      <div class="spinner"></div>
+      <div>Loading pipeline data...</div>
+    </div>
+  </div>
   <div id="graph-view" class="graph-view"></div>
 
   <script>
@@ -466,10 +536,21 @@ app.get('/', (req: Request, res: Response) => {
     }
 
     async function loadData(force = false) {
-      const cacheInfo = document.getElementById('cache-info');
-      const refreshBtn = document.getElementById('refresh-btn');
-      
-      refreshBtn.disabled = true;
+       const cacheInfo = document.getElementById('cache-info');
+       const refreshBtn = document.getElementById('refresh-btn');
+     
+       refreshBtn.disabled = true;
+     
+       // Show loading spinner
+       const listView = document.getElementById('list-view');
+       const graphView = document.getElementById('graph-view');
+       const loadingHTML = '<div class="loading"><div class="spinner"></div><div>Loading pipeline data...</div></div>';
+     
+       if (currentView === 'list') {
+         listView.innerHTML = loadingHTML;
+       } else {
+         graphView.innerHTML = loadingHTML;
+       }
       
       try {
         const response = await fetch('/api/pipelines?force=' + force);

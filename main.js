@@ -1,12 +1,10 @@
 // GitLab Pipeline Monitor - Client-side rendering
-
-let cachedData = null;
+// Backend = JSON data only | Frontend = Rendering
 
 /**
- * Update cache info display
+ * Update cache info in header
  */
-window.updateCacheInfo = function (event) {
-  const response = JSON.parse(event.detail.xhr.responseText);
+function updateCacheInfo(response) {
   const cacheInfo = document.getElementById('cache-info');
   
   if (response.cached && response.cacheAge !== null) {
@@ -22,20 +20,75 @@ window.updateCacheInfo = function (event) {
     }
     cacheInfo.textContent = text;
   }
+}
+
+/**
+ * Render list view - called by hyperscript
+ */
+window.renderList = function (responseText) {
+  const response = JSON.parse(responseText);
+  updateCacheInfo(response);
   
-  cachedData = response.data;
-  renderListView(response.data);
+  const html = buildListHTML(response.data);
+  document.getElementById('content').innerHTML = html;
 };
 
 /**
- * Render graph view with SVG pipelines
+ * Render graph view - called by hyperscript
  */
-window.renderGraphView = function () {
-  if (!cachedData) return;
+window.renderGraph = function (responseText) {
+  const response = JSON.parse(responseText);
+  updateCacheInfo(response);
   
+  const html = buildGraphHTML(response.data);
+  document.getElementById('content').innerHTML = html;
+};
+
+/**
+ * Build list view HTML
+ */
+function buildListHTML(servers) {
   let html = '';
   
-  cachedData.forEach(server => {
+  servers.forEach(server => {
+    html += `<section><h2>${server.serverName}</h2><table><thead><tr><th>Proyecto</th><th>Branch</th><th>Pipeline</th><th>Commit</th></tr></thead><tbody>`;
+    
+    server.projects.forEach(project => {
+      if (project.error) {
+        html += `<tr><td><a href="${project.url}" target="_blank">${project.name}</a></td><td colspan="3"><em>Error: ${project.error}</em></td></tr>`;
+      } else {
+        project.branches.forEach(branch => {
+          html += `<tr>`;
+          html += `<td><a href="${project.url}" target="_blank">${project.name}</a></td>`;
+          html += `<td><code>${branch.name}</code></td>`;
+          
+          if (branch.pipeline) {
+            html += `<td><a href="${branch.pipeline.web_url}" target="_blank">${renderStatusBadge(branch.pipeline.status)}</a></td>`;
+            html += `<td><small title="${branch.commitTitle}">${branch.commitShortId || ''}</small></td>`;
+          } else if (branch.error) {
+            html += `<td colspan="2"><em>${branch.error}</em></td>`;
+          } else {
+            html += `<td>${renderStatusBadge('none')}</td><td></td>`;
+          }
+          
+          html += `</tr>`;
+        });
+      }
+    });
+    
+    html += `</tbody></table></section>`;
+  });
+  
+  return html;
+}
+
+/**
+ * Build graph view HTML
+ */
+function buildGraphHTML(servers) {
+  let html = '';
+  
+  servers.forEach(server => {
     html += `<section><h2>${server.serverName}</h2>`;
     
     server.projects.forEach(project => {
@@ -73,45 +126,7 @@ window.renderGraphView = function () {
     html += `</section>`;
   });
   
-  document.getElementById('content').innerHTML = html;
-};
-
-/**
- * Render list view (simple table)
- */
-function renderListView(servers) {
-  let html = '';
-  
-  servers.forEach(server => {
-    html += `<section><h2>${server.serverName}</h2><table><thead><tr><th>Proyecto</th><th>Branch</th><th>Pipeline</th><th>Commit</th></tr></thead><tbody>`;
-    
-    server.projects.forEach(project => {
-      if (project.error) {
-        html += `<tr><td><a href="${project.url}" target="_blank">${project.name}</a></td><td colspan="3"><em>Error: ${project.error}</em></td></tr>`;
-      } else {
-        project.branches.forEach(branch => {
-          html += `<tr>`;
-          html += `<td><a href="${project.url}" target="_blank">${project.name}</a></td>`;
-          html += `<td><code>${branch.name}</code></td>`;
-          
-          if (branch.pipeline) {
-            html += `<td><a href="${branch.pipeline.web_url}" target="_blank">${renderStatusBadge(branch.pipeline.status)}</a></td>`;
-            html += `<td><small title="${branch.commitTitle}">${branch.commitShortId || ''}</small></td>`;
-          } else if (branch.error) {
-            html += `<td colspan="2"><em>${branch.error}</em></td>`;
-          } else {
-            html += `<td>${renderStatusBadge('none')}</td><td></td>`;
-          }
-          
-          html += `</tr>`;
-        });
-      }
-    });
-    
-    html += `</tbody></table></section>`;
-  });
-  
-  document.getElementById('content').innerHTML = html;
+  return html;
 }
 
 /**
@@ -191,8 +206,3 @@ function renderPipelineSVG(pipeline) {
   
   return svg;
 }
-
-// Load initial data
-document.addEventListener('DOMContentLoaded', () => {
-  htmx.trigger('button[hx-get*="includeJobs=false"]', 'click');
-});

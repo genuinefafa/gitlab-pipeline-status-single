@@ -70,29 +70,38 @@
     <button hx-get="/api/pipelines?includeJobs=false" 
             hx-target="#content" 
             hx-swap="innerHTML"
-            hx-on::before-request="document.getElementById('content').innerHTML='<div class=loading><div class=spinner></div><p>Cargando pipelines...</p></div>'"
-            hx-on::after-request="updateCacheInfo(event)">
+            data-view="list"
+            _="on htmx:beforeRequest
+                 put '<div class=loading><div class=spinner></div><p>Cargando pipelines...</p></div>' into #content
+               on htmx:afterRequest
+                 call renderList(event.detail.xhr.response)">
       Lista
     </button>
     
     <button hx-get="/api/pipelines?includeJobs=true" 
             hx-target="#content" 
             hx-swap="innerHTML"
-            hx-on::before-request="document.getElementById('content').innerHTML='<div class=loading><div class=spinner></div><p>Cargando pipelines con jobs...</p></div>'"
-            hx-on::after-request="updateCacheInfo(event); renderGraphView()">
+            data-view="graph"
+            _="on htmx:beforeRequest
+                 put '<div class=loading><div class=spinner></div><p>Cargando pipelines con jobs...</p></div>' into #content
+               on htmx:afterRequest
+                 call renderGraph(event.detail.xhr.response)">
       Gráfico
     </button>
     
     <button hx-get="/api/pipelines?force=true&includeJobs=false" 
             hx-target="#content" 
             hx-swap="innerHTML"
-            hx-on::before-request="document.getElementById('content').innerHTML='<div class=loading><div class=spinner></div><p>Refrescando...</p></div>'"
-            hx-on::after-request="updateCacheInfo(event)">
+            _="on htmx:beforeRequest
+                 put '<div class=loading><div class=spinner></div><p>Refrescando...</p></div>' into #content
+               on htmx:afterRequest
+                 call renderList(event.detail.xhr.response)">
       🔄 Refresh
     </button>
   </nav>
 
-  <main id="content">
+  <main id="content" 
+        _="on load trigger click on the first button in <nav/>">
     <div class="loading">
       <div class="spinner"></div>
       <p>Inicializando...</p>

@@ -1,6 +1,6 @@
 # GitLab Pipeline Status Monitor
 
-A terminal-based GitLab pipeline status monitor that displays projects, branches, and their pipeline statuses in a beautiful tree view with auto-refresh capabilities.
+A GitLab pipeline status monitor with both web interface and terminal UI that displays projects, branches, and their pipeline statuses with auto-refresh capabilities.
 
 ## Features
 
@@ -117,13 +117,35 @@ servers:
 
 ## Usage
 
-### Production mode (recommended):
+### Web Interface (Recommended)
+
+Start the web server:
+
+```bash
+npm run web
+```
+
+Then open your browser at: **http://localhost:3000**
+
+#### Features:
+- 🌐 **Clean web interface** with Water.css (minimalist dark theme)
+- 📊 **Statistics dashboard** showing servers, projects, branches, and status counts
+- 💾 **Local cache** for faster loading (5-minute TTL)
+- 🔄 **Auto-refresh** every 60 seconds
+- 🔥 **Force refresh button** to bypass cache
+- 👁️ **Two view modes:**
+  - **List View**: Detailed view with all branches and commit info
+  - **Graph View**: Visual representation grouping projects by status
+- 🎨 **Color-coded status badges** for quick visual feedback
+- 🔗 **Clickable links** to GitLab projects and pipelines
+
+### Terminal UI (Legacy)
+
+For terminal-based monitoring:
 
 ```bash
 npm start
 ```
-
-This will automatically compile TypeScript to JavaScript and run the application.
 
 With a custom config file:
 
@@ -131,24 +153,13 @@ With a custom config file:
 npm start path/to/custom-config.yaml
 ```
 
-### Development mode (faster startup):
+Or development mode:
 
 ```bash
 npm run dev
 ```
 
-Runs directly from TypeScript without compiling (uses `ts-node`).
-
-### Manual build:
-
-If you prefer to build separately:
-
-```bash
-npm run build   # Compile TypeScript
-npm start       # Run compiled JavaScript
-```
-
-### Keyboard Controls
+#### Keyboard Controls (Terminal UI only):
 
 - `q` or `Esc` or `Ctrl+C` - Quit the application
 - `r` - Manual refresh
@@ -196,11 +207,14 @@ Last update: 10:30:45 AM | Next update in: 25s | URLs are clickable | Press 'r' 
 ```
 .
 ├── src/
-│   ├── index.ts      # Main entry point
+│   ├── server.ts     # Web server (Express)
+│   ├── cache.ts      # Cache management
+│   ├── index.ts      # Terminal UI entry point
 │   ├── config.ts     # Configuration loader
 │   ├── gitlab.ts     # GitLab API client
 │   ├── ui.ts         # Terminal UI with blessed
 │   └── types.ts      # TypeScript type definitions
+├── .cache/           # Cache directory (auto-generated)
 ├── config.example.yaml
 ├── package.json
 ├── tsconfig.json
@@ -242,6 +256,19 @@ When you specify a group, the monitor will automatically fetch and display all p
 - `display.recentOnly` - Only show branches with recent activity
 - `display.pipelinesPerBranch` - Number of pipelines to show per branch
 - `display.compact` - Use compact display mode
+
+## Cache System
+
+The web interface uses a local file-based cache to improve performance:
+
+- **Cache location**: `.cache/pipeline-data.json`
+- **Cache duration**: 5 minutes (configurable in `src/cache.ts`)
+- **Cache strategy**: 
+  - First request fetches fresh data from GitLab
+  - Subsequent requests use cached data if not expired
+  - Use "Force Refresh" button to bypass cache
+  - Cache is automatically updated on expiration
+- **Auto-generated**: Cache directory is created automatically on first run
 
 ## Troubleshooting
 

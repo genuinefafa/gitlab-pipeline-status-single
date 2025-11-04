@@ -25,11 +25,11 @@ function isProjectExcluded(projectName: string, projectPath: string): boolean {
   if (!config.excludeProjects || config.excludeProjects.length === 0) {
     return false;
   }
-  
+
   const lowerName = projectName.toLowerCase();
   const lowerPath = projectPath.toLowerCase();
-  
-  return config.excludeProjects.some(excluded => {
+
+  return config.excludeProjects.some((excluded) => {
     const lowerExcluded = excluded.toLowerCase();
     return lowerName.includes(lowerExcluded) || lowerPath.includes(lowerExcluded);
   });
@@ -38,7 +38,7 @@ function isProjectExcluded(projectName: string, projectPath: string): boolean {
 /**
  * Fetch fresh pipeline data from GitLab
  */
-async function fetchPipelineData(): Promise<TreeData[]> {
+async function fetchPipelineData(includeJobs: boolean = false): Promise<TreeData[]> {
   const allData: TreeData[] = [];
 
   for (const server of config.servers) {
@@ -85,14 +85,14 @@ async function fetchPipelineData(): Promise<TreeData[]> {
           return null;
         }
         
-        const branches = await client.getBranches(project.id);
+    const branches = await client.getBranches(project.id);
 
         const branchPromises = branches.map(async (branch) => {
           try {
             const pipeline = await client.getLatestPipeline(project.id, branch.name);
             
-            // If pipeline exists, fetch its jobs
-            if (pipeline) {
+            // If requested and pipeline exists, fetch its jobs
+            if (includeJobs && pipeline) {
               const jobs = await client.getPipelineJobs(project.id, pipeline.id);
               pipeline.jobs = jobs;
             }
@@ -149,15 +149,23 @@ async function fetchPipelineData(): Promise<TreeData[]> {
  */
 app.get('/api/pipelines', async (req: Request, res: Response) => {
   const force = req.query.force === 'true';
+  const includeJobs = req.query.includeJobs === 'true';
 
   try {
-    // Try to get from cache first
-    let data = cache.get(force);
+    let data: TreeData[] | null = null;
 
-    if (!data) {
-      // Fetch fresh data
-      data = await fetchPipelineData();
-      cache.set(data);
+    // If includeJobs is requested, fetch fresh data to ensure jobs are present
+    if (includeJobs) {
+      data = await fetchPipelineData(true);
+    } else {
+      // Try to get from cache first
+      data = cache.get(force);
+
+      if (!data) {
+        // Fetch fresh data
+        data = await fetchPipelineData(false);
+        cache.set(data);
+      }
     }
 
     const cacheAge = cache.getAge();
@@ -166,6 +174,7 @@ app.get('/api/pipelines', async (req: Request, res: Response) => {
       data,
       cached: !force && cacheAge !== null,
       cacheAge,
+      includeJobs,
       timestamp: Date.now(),
     });
   } catch (error) {
@@ -331,7 +340,7 @@ app.get('/', (req: Request, res: Response) => {
      .status-running { background: #2563eb; color: #fff; }
      .status-running::before { content: '🔵'; }
    
-     .status-pending { background: #ca8a04; color: #fff; }
+  .status-pending { background: #facc15; color: #111827; }
      .status-pending::before { content: '🟡'; }
    
      .status-canceled { background: #6b7280; color: #fff; }
@@ -482,6 +491,38 @@ app.get('/', (req: Request, res: Response) => {
     .job-badge.pending { background: #fef3c7; color: #92400e; }
     .job-badge.canceled { background: #e5e7eb; color: #374151; }
     .job-badge.skipped { background: #e5e7eb; color: #6b7280; }
+
+    /* Stage timeline */
+    .stage-timeline {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .stage-segment {
+      height: 8px;
+      border-radius: 4px;
+      flex: 1 1 0;
+      background: #eee;
+      position: relative;
+    }
+    .stage-segment.status-success { background: #16a34a; }
+    .stage-segment.status-failed { background: #dc2626; }
+    .stage-segment.status-running { background: #2563eb; }
+    .stage-segment.status-pending { background: #facc15; }
+    .stage-segment.status-canceled { background: #6b7280; }
+    .stage-segment.status-skipped { background: #9ca3af; }
+    .stage-segment.status-manual { background: #9333ea; }
+    .stage-segment.status-created { background: #6b7280; }
+    .stage-segment.status-waiting_for_resource { background: #ea580c; }
+    .stage-segment.status-preparing { background: #ea580c; }
+    .stage-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 4px;
+      font-size: 10px;
+      color: #666;
+    }
   </style>
 </head>
 <body>
@@ -544,7 +585,9 @@ app.get('/', (req: Request, res: Response) => {
        // Show loading spinner
        const listView = document.getElementById('list-view');
        const graphView = document.getElementById('graph-view');
-       const loadingHTML = '<div class="loading"><div class="spinner"></div><div>Loading pipeline data...</div></div>';
+      const loadingHTML = currentView === 'graph'
+        ? '<div class="loading"><div class="spinner"></div><div>Loading graph view (includes detailed jobs) ...</div></div>'
+        : '<div class="loading"><div class="spinner"></div><div>Loading pipeline data...</div></div>';
      
        if (currentView === 'list') {
          listView.innerHTML = loadingHTML;
@@ -553,7 +596,8 @@ app.get('/', (req: Request, res: Response) => {
        }
       
       try {
-        const response = await fetch('/api/pipelines?force=' + force);
+        const includeJobs = currentView === 'graph';
+        const response = await fetch('/api/pipelines?force=' + force + '&includeJobs=' + includeJobs);
         const result = await response.json();
         
         if (result.error) {
@@ -731,15 +775,15 @@ app.get('/', (req: Request, res: Response) => {
                           <div class="graph-branch">
                             <div class="graph-branch-name">\${branch.name}</div>
                             \${branch.pipeline ? 
-                              '<a href="' + branch.pipeline.web_url + '" target="_blank" class="pipeline-status status-' + branch.pipeline.status + '">' + 
+                              '<a href="' + branch.pipeline.web_url + '" target="_blank" class="pipeline-status status-' + branch.pipeline.status + '" title="Pipeline status: ' + branch.pipeline.status + '">' + 
                               branch.pipeline.status + 
                               '</a>' :
-                              '<span class="pipeline-status status-none">No pipeline</span>'
+                              '<span class="pipeline-status status-none" title="No pipeline for this branch">No pipeline</span>'
                             }
                             \${branch.pipeline && branch.pipeline.jobs && branch.pipeline.jobs.length > 0 ?
                               '<div class="pipeline-jobs">' +
                               branch.pipeline.jobs.map(job => 
-                                '<span class="job-badge ' + job.status + '">' + job.name + '</span>'
+                                '<span class="job-badge ' + job.status + '" title="' + job.stage + ': ' + job.status + '">' + job.name + '</span>'
                               ).join('') +
                               '</div>' : ''
                             }

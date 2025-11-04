@@ -67,6 +67,13 @@ async function fetchPipelineData(): Promise<TreeData[]> {
         const branchPromises = branches.map(async (branch) => {
           try {
             const pipeline = await client.getLatestPipeline(project.id, branch.name);
+            
+            // If pipeline exists, fetch its jobs
+            if (pipeline) {
+              const jobs = await client.getPipelineJobs(project.id, pipeline.id);
+              pipeline.jobs = jobs;
+            }
+            
             return {
               name: branch.name,
               commitTitle: branch.commit.title,
@@ -155,76 +162,88 @@ app.get('/', (req: Request, res: Response) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GitLab Pipeline Monitor</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/dark.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/modern-normalize@2.0.0/modern-normalize.min.css">
   <style>
     body {
+      font-family: system-ui, -apple-system, sans-serif;
+      line-height: 1.5;
+      padding: 1rem;
       max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    button {
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    button.active {
+      font-weight: bold;
     }
     
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 2rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #ddd;
     }
     
     .controls {
       display: flex;
-      gap: 1rem;
+      gap: 0.5rem;
       align-items: center;
     }
     
     .loading {
       text-align: center;
       padding: 2rem;
-      font-size: 1.2rem;
     }
     
     .server-section {
-      margin-bottom: 3rem;
-      border: 1px solid #444;
-      padding: 1.5rem;
-      border-radius: 8px;
+      margin-bottom: 2rem;
+      border: 1px solid #ddd;
+      padding: 1rem;
     }
     
     .server-section h2 {
       margin-top: 0;
-      border-bottom: 2px solid #666;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid #ddd;
       padding-bottom: 0.5rem;
     }
     
     .project-card {
-      margin-bottom: 2rem;
-      border-left: 4px solid #555;
+      margin-bottom: 1.5rem;
+      border-left: 3px solid #ccc;
       padding-left: 1rem;
     }
     
     .project-card.has-error {
-      border-left-color: #ff6b6b;
-    }
-    
-    .project-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
+      border-left-color: #dc2626;
     }
     
     .project-name {
-      font-size: 1.3rem;
-      font-weight: bold;
-      margin-bottom: 0.3rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
     }
     
     .project-path {
-      color: #888;
+      color: #666;
       font-size: 0.9rem;
-      margin-bottom: 1rem;
+      margin-bottom: 0.5rem;
     }
     
     .branches {
-      display: grid;
-      gap: 0.8rem;
-      margin-left: 1rem;
+      margin-top: 0.5rem;
     }
     
     .branch {
@@ -232,106 +251,85 @@ app.get('/', (req: Request, res: Response) => {
       grid-template-columns: 150px 1fr auto;
       gap: 1rem;
       align-items: center;
-      padding: 0.8rem;
-      background: rgba(255, 255, 255, 0.03);
-      border-radius: 4px;
+      padding: 0.5rem;
+      border-bottom: 1px solid #eee;
     }
     
     .branch-name {
-      font-weight: 600;
+      font-weight: 500;
       font-family: monospace;
     }
     
     .commit-info {
       font-size: 0.9rem;
-      color: #aaa;
+      color: #666;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     
     .pipeline-status {
-      padding: 0.3rem 0.8rem;
-      border-radius: 4px;
-      font-size: 0.85rem;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
       font-weight: 600;
       text-transform: uppercase;
       white-space: nowrap;
+      text-decoration: none;
+      display: inline-block;
     }
     
-    .status-success { background: #51cf66; color: #000; }
-    .status-failed { background: #ff6b6b; color: #fff; }
-    .status-running { background: #4dabf7; color: #fff; }
-    .status-pending { background: #ffd43b; color: #000; }
-    .status-canceled { background: #868e96; color: #fff; }
-    .status-skipped { background: #868e96; color: #fff; }
-    .status-manual { background: #cc5de8; color: #fff; }
-    .status-created { background: #868e96; color: #fff; }
-    .status-waiting_for_resource { background: #fd7e14; color: #fff; }
-    .status-preparing { background: #fd7e14; color: #fff; }
-    .status-none { background: #495057; color: #aaa; }
+    .status-success { background: #16a34a; color: #fff; }
+    .status-failed { background: #dc2626; color: #fff; }
+    .status-running { background: #2563eb; color: #fff; }
+    .status-pending { background: #ca8a04; color: #fff; }
+    .status-canceled { background: #6b7280; color: #fff; }
+    .status-skipped { background: #6b7280; color: #fff; }
+    .status-manual { background: #9333ea; color: #fff; }
+    .status-created { background: #6b7280; color: #fff; }
+    .status-waiting_for_resource { background: #ea580c; color: #fff; }
+    .status-preparing { background: #ea580c; color: #fff; }
+    .status-none { background: #6b7280; color: #fff; }
     
     .error-message {
-      color: #ff6b6b;
-      font-style: italic;
+      color: #dc2626;
       padding: 0.5rem;
-      background: rgba(255, 107, 107, 0.1);
-      border-radius: 4px;
+      background: #fee;
+      border-left: 3px solid #dc2626;
     }
     
     .cache-info {
-      font-size: 0.9rem;
-      color: #888;
+      font-size: 0.85rem;
+      color: #666;
     }
     
     .stats {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
       gap: 1rem;
-      margin-bottom: 2rem;
+      margin-bottom: 1rem;
     }
     
     .stat-card {
       padding: 1rem;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 8px;
+      border: 1px solid #ddd;
       text-align: center;
     }
     
     .stat-value {
-      font-size: 2rem;
+      font-size: 1.5rem;
       font-weight: bold;
-      margin-bottom: 0.3rem;
     }
     
     .stat-label {
-      font-size: 0.9rem;
-      color: #888;
+      font-size: 0.8rem;
+      color: #666;
       text-transform: uppercase;
-    }
-
-    a {
-      color: #4dabf7;
-      text-decoration: none;
-    }
-    
-    a:hover {
-      text-decoration: underline;
     }
 
     .view-toggle {
       margin-bottom: 1rem;
       display: flex;
       gap: 0.5rem;
-    }
-
-    .view-toggle button {
-      padding: 0.5rem 1rem;
-    }
-
-    .view-toggle button.active {
-      background: #4dabf7;
-      color: #000;
     }
 
     .graph-view {
@@ -342,67 +340,83 @@ app.get('/', (req: Request, res: Response) => {
       display: block;
     }
 
+    .list-view {
+      display: none;
+    }
+
     .list-view.active {
       display: block;
     }
 
     .project-graph {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1.5rem;
-      padding: 1rem;
-      background: rgba(255, 255, 255, 0.02);
-      border-radius: 8px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1rem;
     }
 
     .graph-node {
-      min-width: 250px;
       padding: 1rem;
-      background: rgba(255, 255, 255, 0.05);
-      border: 2px solid #555;
-      border-radius: 8px;
-      position: relative;
+      border: 1px solid #ddd;
     }
 
     .graph-node.status-success {
-      border-color: #51cf66;
+      border-left: 4px solid #16a34a;
     }
 
     .graph-node.status-failed {
-      border-color: #ff6b6b;
+      border-left: 4px solid #dc2626;
     }
 
     .graph-node.status-running {
-      border-color: #4dabf7;
+      border-left: 4px solid #2563eb;
     }
 
     .graph-node-title {
-      font-weight: bold;
-      margin-bottom: 0.5rem;
-      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #ddd;
     }
 
     .graph-node-branches {
       font-size: 0.85rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.3rem;
     }
 
     .graph-branch {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0.3rem;
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 3px;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #eee;
     }
 
-    .graph-branch-status {
-      font-size: 0.7rem;
-      padding: 0.2rem 0.5rem;
-      border-radius: 3px;
+    .graph-branch:last-child {
+      border-bottom: none;
     }
+
+    .graph-branch-name {
+      font-weight: 500;
+      font-family: monospace;
+      margin-bottom: 0.25rem;
+    }
+
+    .pipeline-jobs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      margin-top: 0.25rem;
+    }
+
+    .job-badge {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.4rem;
+      background: #eee;
+      border-radius: 2px;
+    }
+
+    .job-badge.success { background: #dcfce7; color: #166534; }
+    .job-badge.failed { background: #fee2e2; color: #991b1b; }
+    .job-badge.running { background: #dbeafe; color: #1e40af; }
+    .job-badge.pending { background: #fef3c7; color: #92400e; }
+    .job-badge.canceled { background: #e5e7eb; color: #374151; }
+    .job-badge.skipped { background: #e5e7eb; color: #6b7280; }
   </style>
 </head>
 <body>
@@ -431,23 +445,23 @@ app.get('/', (req: Request, res: Response) => {
 
     function switchView(view) {
       currentView = view;
-      document.querySelectorAll('.view-toggle button').forEach(btn => btn.classList.remove('active'));
-      event.target.classList.add('active');
+      
+      // Update button states
+      document.querySelectorAll('.view-toggle button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      document.querySelector('[onclick*="' + view + '"]').classList.add('active');
+      
+      // Switch views
+      const listView = document.getElementById('list-view');
+      const graphView = document.getElementById('graph-view');
       
       if (view === 'list') {
-        document.getElementById('list-view').classList.add('active');
-        document.getElementById('graph-view').classList.remove('active');
+        listView.classList.add('active');
+        graphView.classList.remove('active');
       } else {
-        document.getElementById('list-view').classList.remove('active');
-        document.getElementById('graph-view').classList.add('active');
-      }
-      
-      if (cachedData) {
-        if (view === 'list') {
-          renderListView(cachedData);
-        } else {
-          renderGraphView(cachedData);
-        }
+        listView.classList.remove('active');
+        graphView.classList.add('active');
       }
     }
 
@@ -634,17 +648,24 @@ app.get('/', (req: Request, res: Response) => {
                       <div class="graph-node-branches">
                         \${project.branches.slice(0, 5).map(branch => \`
                           <div class="graph-branch">
-                            <span>\${branch.name}</span>
+                            <div class="graph-branch-name">\${branch.name}</div>
                             \${branch.pipeline ? 
-                              '<span class="graph-branch-status pipeline-status status-' + branch.pipeline.status + '">' + 
+                              '<a href="' + branch.pipeline.web_url + '" target="_blank" class="pipeline-status status-' + branch.pipeline.status + '">' + 
                               branch.pipeline.status + 
-                              '</span>' :
-                              '<span class="graph-branch-status pipeline-status status-none">-</span>'
+                              '</a>' :
+                              '<span class="pipeline-status status-none">No pipeline</span>'
+                            }
+                            \${branch.pipeline && branch.pipeline.jobs && branch.pipeline.jobs.length > 0 ?
+                              '<div class="pipeline-jobs">' +
+                              branch.pipeline.jobs.map(job => 
+                                '<span class="job-badge ' + job.status + '">' + job.name + '</span>'
+                              ).join('') +
+                              '</div>' : ''
                             }
                           </div>
                         \`).join('')}
                         \${project.branches.length > 5 ? 
-                          '<div style="font-size: 0.8rem; color: #888; margin-top: 0.3rem;">+ ' + 
+                          '<div style="font-size: 0.8rem; color: #666; margin-top: 0.5rem;">+ ' + 
                           (project.branches.length - 5) + ' more branches</div>' : 
                           ''
                         }

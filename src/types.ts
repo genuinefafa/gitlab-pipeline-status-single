@@ -54,6 +54,15 @@ export interface Pipeline {
   web_url: string;
   created_at: string;
   updated_at: string;
+  jobs?: PipelineJob[];
+}
+
+export interface PipelineJob {
+  id: number;
+  name: string;
+  status: PipelineStatus;
+  stage: string;
+  web_url: string;
 }
 
 export type PipelineStatus =

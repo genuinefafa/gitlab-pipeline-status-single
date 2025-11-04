@@ -80,6 +80,25 @@ export class GitLabClient {
     }
   }
 
+  async getPipelineJobs(projectId: number, pipelineId: number) {
+    try {
+      const response = await this.client.get(
+        `/projects/${projectId}/pipelines/${pipelineId}/jobs`
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 403) {
+          return [];
+        }
+        throw new Error(
+          `Failed to fetch pipeline jobs: ${error.response?.status} ${error.response?.statusText}`
+        );
+      }
+      throw error;
+    }
+  }
+
   async getGroupProjects(config: GroupConfig): Promise<Project[]> {
     try {
       const endpoint = config.id

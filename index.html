@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitLab Pipeline Monitor</title>
+  
+  <!-- Sakura.css - Classless CSS framework -->
+  <link rel="stylesheet" href="https://unpkg.com/sakura.css/css/sakura.css" type="text/css">
+  
+  <!-- htmx -->
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  
+  <!-- hyperscript -->
+  <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+  
+  <style>
+    /* Minimal custom styles */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    
+    .loading { text-align: center; padding: 2rem; }
+    
+    /* Status badges */
+    mark[data-status] { padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.85rem; font-weight: 600; }
+    mark[data-status="success"] { background: #16a34a; color: #fff; }
+    mark[data-status="success"]::before { content: "🟢 "; }
+    mark[data-status="failed"] { background: #dc2626; color: #fff; }
+    mark[data-status="failed"]::before { content: "🔴 "; }
+    mark[data-status="running"] { background: #2563eb; color: #fff; }
+    mark[data-status="running"]::before { content: "🔵 "; }
+    mark[data-status="pending"] { background: #facc15; color: #111827; }
+    mark[data-status="pending"]::before { content: "🟡 "; }
+    mark[data-status="canceled"] { background: #6b7280; color: #fff; }
+    mark[data-status="canceled"]::before { content: "⚫ "; }
+    mark[data-status="skipped"] { background: #9ca3af; color: #fff; }
+    mark[data-status="skipped"]::before { content: "⚪ "; }
+    mark[data-status="manual"] { background: #9333ea; color: #fff; }
+    mark[data-status="manual"]::before { content: "🟣 "; }
+    mark[data-status="none"] { background: #6b7280; color: #fff; }
+    mark[data-status="none"]::before { content: "⚪ "; }
+    
+    /* Simple project cards */
+    article { border-left: 4px solid #ddd; margin: 1rem 0; }
+    article[data-status="success"] { border-left-color: #16a34a; }
+    article[data-status="failed"] { border-left-color: #dc2626; }
+    article[data-status="running"] { border-left-color: #2563eb; }
+    
+    svg { max-width: 100%; height: auto; display: block; margin: 1rem 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🚀 GitLab Pipeline Monitor</h1>
+    <small id="cache-info"></small>
+  </header>
+
+  <nav>
+    <button hx-get="/api/pipelines?includeJobs=false" 
+            hx-target="#content" 
+            hx-swap="innerHTML"
+            hx-on::before-request="document.getElementById('content').innerHTML='<div class=loading><div class=spinner></div><p>Cargando pipelines...</p></div>'"
+            hx-on::after-request="updateCacheInfo(event)">
+      Lista
+    </button>
+    
+    <button hx-get="/api/pipelines?includeJobs=true" 
+            hx-target="#content" 
+            hx-swap="innerHTML"
+            hx-on::before-request="document.getElementById('content').innerHTML='<div class=loading><div class=spinner></div><p>Cargando pipelines con jobs...</p></div>'"
+            hx-on::after-request="updateCacheInfo(event); renderGraphView()">
+      Gráfico
+    </button>
+    
+    <button hx-get="/api/pipelines?force=true&includeJobs=false" 
+            hx-target="#content" 
+            hx-swap="innerHTML"
+            hx-on::before-request="document.getElementById('content').innerHTML='<div class=loading><div class=spinner></div><p>Refrescando...</p></div>'"
+            hx-on::after-request="updateCacheInfo(event)">
+      🔄 Refresh
+    </button>
+  </nav>
+
+  <main id="content">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Inicializando...</p>
+    </div>
+  </main>
+
+  <script src="/main.js" type="module"></script>
+</body>
+</html>

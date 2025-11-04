@@ -4,11 +4,14 @@
   "description": "GitLab pipeline status monitor with tree view",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npx vite build",
     "prestart": "npm run build",
     "start": "node dist/index.js",
-    "web": "ts-node src/server.ts",
-    "dev": "ts-node src/index.ts",
+    "dev": "concurrently \"npx tsx src/api-server.ts\" \"npx vite\"",
+    "api": "npx tsx src/api-server.ts",
+    "vite": "npx vite",
+    "web": "npx tsx src/server.ts",
+    "legacy:dev": "npx tsx src/index.ts",
     "watch": "tsc -w"
   },
   "keywords": [
@@ -31,7 +34,10 @@
     "@types/blessed": "^0.1.25",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.0",
+    "concurrently": "^9.2.1",
     "ts-node": "^10.9.1",
-    "typescript": "^5.3.2"
+    "tsx": "^4.20.6",
+    "typescript": "^5.3.2",
+    "vite": "^7.1.12"
   }
 }

@@ -3,13 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GitLab Pipeline Monitor - htmx</title>
+  <title>GitLab Pipeline Monitor</title>
   
   <!-- Sakura.css - Classless CSS framework -->
   <link rel="stylesheet" href="https://unpkg.com/sakura.css/css/sakura.css" type="text/css">
   
   <!-- htmx -->
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  
+  <!-- hyperscript -->
+  <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
   
   <style>
     /* Minimal custom styles */
@@ -154,14 +157,18 @@
   <header>
     <h1>🚀 GitLab Pipeline Monitor</h1>
     <p>
-      <small>
-        Auto-refresh: 
-        Servers (30min) | 
-        Branches (5min) | 
-        Pipelines (5s)
-      </small>
+      <small id="cache-info">Multi-level cache: L1 (30min) → L2 (5min) → L3 (5s)</small>
     </p>
   </header>
+
+  <nav>
+    <button _="on click 
+                set #content's innerHTML to '<div class=loading><p>⏳ Loading...</p></div>'
+                then fetch /api/servers/Starhopper 
+                then put the result into #content">
+      📋 Refresh
+    </button>
+  </nav>
 
   <main id="content">
     <!-- Initial loading placeholder - will be replaced by htmx on load -->
@@ -169,10 +176,8 @@
       class="loading"
       hx-get="/api/servers/Starhopper"
       hx-trigger="load"
-      hx-swap="outerHTML"
-      hx-indicator="#global-indicator">
+      hx-swap="outerHTML">
       <p>⏳ Loading GitLab data...</p>
-      <span id="global-indicator" class="htmx-indicator">⏳</span>
     </div>
   </main>
 

@@ -1,11 +1,8 @@
 {{! Template for a single project section with all branches }}
 {{! Used by: GET /api/projects/:serverName/:projectPath/branches }}
 <article id="project-{{safeProjectId}}"
-         hx-get="/api/projects/{{serverName}}/{{projectPath}}/branches"
-         hx-trigger="load, every 5m"
-         hx-target="this"
-         hx-swap="outerHTML"
-         hx-indicator="#spinner-project-{{safeProjectId}}">
+         data-server="{{serverName}}"
+         data-project="{{projectPath}}">
   <h3>
     <a href="{{url}}" target="_blank">{{name}}</a>
     <span id="spinner-project-{{safeProjectId}}" class="htmx-indicator">⏳</span>

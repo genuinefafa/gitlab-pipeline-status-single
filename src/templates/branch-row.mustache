@@ -1,7 +1,7 @@
 {{! Template for a single branch row with pipeline status }}
 {{! Used by: GET /api/branches/:projectPath/:branchName }}
 <tr hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs={{includeJobs}}" 
-    hx-trigger="load, every 5s"
+    hx-trigger="every 5s"
     hx-target="this"
     hx-swap="outerHTML"
     hx-indicator="#spinner-{{safeId}}"

@@ -84,39 +84,15 @@
   </header>
 
   <nav>
-    <button hx-get="/api/pipelines?includeJobs=false" 
-            hx-target="#content"
-            hx-ext="client-side-templates"
-            mustache-template="tpl-list"
-            _="on htmx:beforeRequest
-                 put '<div class=loading><div class=spinner></div><p>Cargando pipelines...</p></div>' 
-                 into #content
-               on htmx:afterOnLoad
-                 call window.updateCacheInfo(event.detail.xhr.responseText)">
+    <button _="on click call window.fetchWithProgress(false, false, 'tpl-list')">
       📋 Lista
     </button>
     
-    <button hx-get="/api/pipelines?includeJobs=true" 
-            hx-target="#content"
-            hx-ext="client-side-templates"
-            mustache-template="tpl-graph"
-            _="on htmx:beforeRequest
-                 put '<div class=loading><div class=spinner></div><p>Cargando pipelines con jobs...</p></div>' 
-                 into #content
-               on htmx:afterOnLoad
-                 call window.updateCacheInfo(event.detail.xhr.responseText)">
+    <button _="on click call window.fetchWithProgress(true, false, 'tpl-graph')">
       📊 Gráfico
     </button>
     
-    <button hx-get="/api/pipelines?force=true&includeJobs=false" 
-            hx-target="#content"
-            hx-ext="client-side-templates"
-            mustache-template="tpl-list"
-            _="on htmx:beforeRequest
-                 put '<div class=loading><div class=spinner></div><p>Refrescando...</p></div>' 
-                 into #content
-               on htmx:afterOnLoad
-                 call window.updateCacheInfo(event.detail.xhr.responseText)">
+    <button _="on click call window.fetchWithProgress(false, true, 'tpl-list')">
       🔄 Refresh
     </button>
   </nav>

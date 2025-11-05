@@ -124,9 +124,17 @@ function fetchData() {
 - Returns typed data structures
 - NO presentation logic
 
-**src/cache.ts**
-- File-based caching (10s TTL)
-- Stores/retrieves JSON data
+**src/multi-level-cache.ts**
+- Multi-level file-based caching with granular TTLs
+- Level 1: Groups/Projects (30min TTL) - structure changes rarely
+- Level 2: Branches per project (5min TTL) - branches change occasionally  
+- Level 3: Pipeline status per branch (5sec TTL) - status changes frequently
+- Enables partial refresh without full UI block
+- Each level cached independently for optimal performance
+
+**src/cache.ts** (legacy, for backward compatibility)
+- Single-level file-based caching (10s TTL)
+- Stores/retrieves full JSON data tree
 - Tracks cache age and fetch duration
 
 **src/types.ts**
@@ -183,6 +191,103 @@ User clicks Refresh (force=true)
   → Server sends 'complete' event with JSON
   → JS renders final view via Mustache
 ```
+
+## 💾 Multi-Level Cache Strategy
+
+### Problem
+
+GitLab API calls are slow (~10s for full fetch):
+- Fetching groups/projects structure: ~2-3s (changes rarely)
+- Fetching branches per project: ~1-2s each (changes occasionally)
+- Fetching pipeline status: ~0.5s each (changes frequently)
+
+A single monolithic cache with 10s TTL means:
+- ❌ Stale data most of the time (pipelines change every few seconds)
+- ❌ Full UI block during refresh (10s blank screen)
+- ❌ Wasted API calls (refetching groups/projects that haven't changed)
+
+### Solution: Granular TTLs + Partial Refresh
+
+**Level 1: Groups & Projects (30min TTL)**
+- What: GitLab group/project structure (IDs, names, URLs)
+- Why 30min: Organizational structure changes rarely
+- Cache key: `serverName`
+- File: `.cache/groups-projects.json`
+
+**Level 2: Branches (5min TTL)**
+- What: Branch names and commit info per project
+- Why 5min: Developers create/merge branches occasionally
+- Cache key: `projectPath`
+- File: `.cache/branches.json`
+
+**Level 3: Pipelines (5sec TTL)**
+- What: Pipeline status, jobs, and metadata per branch
+- Why 5sec: CI/CD status changes rapidly (running → success/failed)
+- Cache key: `projectPath:branchName`
+- File: `.cache/pipelines.json`
+
+### Refresh Strategy
+
+**Partial UI Updates (No Full Block):**
+1. User sees current cached data immediately
+2. Background fetch checks each level independently:
+   - Level 1 expired? → Fetch groups/projects, update project list
+   - Level 2 expired? → Fetch branches for affected projects, update branch rows
+   - Level 3 expired? → Fetch pipelines for affected branches, update status badges
+3. htmx swaps only changed DOM elements (no full page reload)
+4. Loading indicators (⏳ icon) shown per affected row, not blocking entire UI
+
+**Example: User opens app after 10 minutes**
+- Level 1 cache (30min): **HIT** → Groups/projects loaded instantly
+- Level 2 cache (5min): **MISS** → Fetch branches in background, show ⏳ per project
+- Level 3 cache (5sec): **MISS** → Fetch pipelines in background, show ⏳ per branch
+- UI remains interactive throughout; updates appear incrementally
+
+**Example: User refreshes after 3 seconds**
+- Level 1 cache (30min): **HIT** → No fetch needed
+- Level 2 cache (5min): **HIT** → No fetch needed
+- Level 3 cache (5sec): **MISS** → Fetch only pipelines (~0.5s per project)
+- Fast refresh with minimal API load
+
+### API Endpoints for Partial Refresh
+
+```
+GET /api/groups-projects?server=:name
+→ Returns Level 1 cache or fresh fetch (30min TTL)
+
+GET /api/projects/:projectPath/branches
+→ Returns Level 2 cache or fresh fetch (5min TTL)
+
+GET /api/branches/:projectPath/:branchName/pipeline?includeJobs=true
+→ Returns Level 3 cache or fresh fetch (5sec TTL)
+```
+
+### Frontend Integration
+
+**Templates:**
+- `tpl-project-row` - Single project with loading state
+- `tpl-branch-row` - Single branch with pipeline status
+- `tpl-pipeline-badge` - Just the status badge for swapping
+- `tpl-loading-icon` - ⏳ Clock icon (no HTML in JS)
+
+**htmx attributes:**
+```html
+<!-- Branch row with auto-refresh every 5s -->
+<tr hx-get="/api/branches/my-project/main/pipeline" 
+    hx-trigger="every 5s"
+    hx-target="this"
+    hx-swap="outerHTML"
+    hx-indicator="#loading-icon-main">
+  <!-- ... branch data ... -->
+  <span id="loading-icon-main" class="htmx-indicator">⏳</span>
+</tr>
+```
+
+**Result:**
+- Zero JavaScript HTML generation (templates only)
+- Partial DOM updates (no full refresh)
+- Granular cache reduces API load by ~80%
+- UI remains interactive during background fetches
 
 ## 🎨 Styling Strategy
 

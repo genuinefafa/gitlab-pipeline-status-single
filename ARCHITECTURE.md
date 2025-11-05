@@ -1,5 +1,47 @@
 # Architecture & Design Principles
 
+## 📋 Code Standards
+
+### Language & Communication
+
+**MANDATORY - All code must follow these rules:**
+
+1. **Code in English ONLY**
+   - ✅ All comments, docstrings, and inline documentation in English
+   - ✅ All variable names, function names, class names in English
+   - ✅ All commit messages in English
+   - ✅ All PR titles and descriptions in English
+   - ✅ All error messages and user-facing strings in English (or i18n keys)
+   - ❌ NO Spanish (or other languages) in code, comments, or Git messages
+
+2. **Why English?**
+   - Global collaboration: English is the lingua franca of open-source and tech
+   - Consistency: Mixed languages create confusion and maintenance debt
+   - Tooling: Most linters, AI assistants, and documentation tools expect English
+   - Future-proofing: Code may outlive the original team
+
+**Examples:**
+
+```typescript
+// ❌ BAD
+function obtenerDatos() {
+  // llamamos a la API de GitLab
+  const resultado = await fetch('/api/pipelines');
+  return resultado;
+}
+
+// ✅ GOOD
+function fetchData() {
+  // Call GitLab API to retrieve pipeline data
+  const result = await fetch('/api/pipelines');
+  return result;
+}
+```
+
+**Git commit messages:**
+- ❌ `fix: arreglo el bug del textbox`
+- ✅ `fix(ui): guard textbox value before trim to satisfy TS18048`
+
 ## 🎯 Core Principles
 
 ### Strict Separation of Concerns (SoC)

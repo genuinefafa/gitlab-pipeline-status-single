@@ -43,6 +43,15 @@ window.updateCacheInfo = function (responseText) {
 };
 
 /**
+ * Render a template by ID with given data
+ * Pure function: template ID + data → rendered HTML
+ */
+function renderTemplate(templateId, data) {
+  const template = document.getElementById(templateId).innerHTML;
+  return Mustache.render(template, data);
+}
+
+/**
  * Fetch data with real-time SSE progress updates
  * @param {boolean} includeJobs - Whether to include pipeline jobs
  * @param {boolean} force - Whether to force cache refresh
@@ -52,17 +61,18 @@ window.fetchWithProgress = function(includeJobs, force, templateId) {
   const content = document.getElementById('content');
   const cacheInfo = document.getElementById('cache-info');
   
-  // Show loading state
-  content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Conectando...</p></div>';
+  // Show loading state using template
+  content.innerHTML = renderTemplate('tpl-loading', { message: 'Conectando...' });
   
   const url = `/api/pipelines/stream?includeJobs=${includeJobs}&force=${force}`;
   const eventSource = new EventSource(url);
   
   eventSource.addEventListener('progress', (e) => {
     const data = JSON.parse(e.data);
-    const loadingDiv = content.querySelector('.loading p');
-    if (loadingDiv) {
-      loadingDiv.textContent = data.message || 'Procesando...';
+    // Update only the message text (no HTML manipulation)
+    const messageEl = content.querySelector('.loading p');
+    if (messageEl) {
+      messageEl.textContent = data.message || 'Procesando...';
     }
   });
   
@@ -70,7 +80,7 @@ window.fetchWithProgress = function(includeJobs, force, templateId) {
     const response = JSON.parse(e.data);
     eventSource.close();
     
-    // Update cache info
+    // Update cache info (text only, no HTML)
     if (response.cached && response.cacheAge !== null) {
       let text = `📦 Caché (hace ${response.cacheAge}s)`;
       if (response.cacheDuration) {
@@ -85,15 +95,13 @@ window.fetchWithProgress = function(includeJobs, force, templateId) {
       cacheInfo.textContent = text;
     }
     
-    // Render with Mustache template
-    const template = document.getElementById(templateId).innerHTML;
-    const rendered = Mustache.render(template, response);
-    content.innerHTML = rendered;
+    // Render data using template
+    content.innerHTML = renderTemplate(templateId, response);
   });
   
   eventSource.addEventListener('error', (e) => {
     eventSource.close();
-    content.innerHTML = '<div class="loading"><p>❌ Error al cargar datos</p></div>';
+    content.innerHTML = renderTemplate('tpl-error', { message: 'Error al cargar datos' });
     console.error('SSE Error:', e);
   });
 };

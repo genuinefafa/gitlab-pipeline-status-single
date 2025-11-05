@@ -206,6 +206,21 @@
     {{/data}}
   </script>
 
+  <!-- Loading State Template -->
+  <script id="tpl-loading" type="text/template">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>{{message}}</p>
+    </div>
+  </script>
+
+  <!-- Error State Template -->
+  <script id="tpl-error" type="text/template">
+    <div class="loading">
+      <p>❌ {{message}}</p>
+    </div>
+  </script>
+
   <script src="/main.js" type="module"></script>
 </body>
 </html>

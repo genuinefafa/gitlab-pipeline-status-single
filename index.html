@@ -62,7 +62,7 @@
     article[data-status="running"] { border-left-color: #2563eb; }
     
     svg { max-width: 100%; height: auto; display: block; margin: 1rem 0; }
-
+    
     /* Graph view layout (stages in columns) */
     .stages { display: flex; gap: 0.75rem; align-items: flex-start; }
     .stage { min-width: 160px; }
@@ -84,44 +84,21 @@
   </header>
 
   <nav>
-    <button 
-      hx-get="/api/pipelines?includeJobs=false"
-      hx-target="#content"
-      hx-ext="client-side-templates"
-      mustache-template="tpl-list"
-      _="on htmx:beforeRequest
-           put '<div class=loading><div class=spinner></div><p>Cargando pipelines...</p></div>' into #content
-         on htmx:afterOnLoad
-           call window.updateCacheInfo(event.detail.xhr.responseText)">
+    <button _="on click call window.fetchWithProgress(false, false, 'tpl-list')">
       📋 Lista
     </button>
-
-    <button 
-      hx-get="/api/pipelines?includeJobs=true"
-      hx-target="#content"
-      hx-ext="client-side-templates"
-      mustache-template="tpl-graph"
-      _="on htmx:beforeRequest
-           put '<div class=loading><div class=spinner></div><p>Cargando pipelines con jobs...</p></div>' into #content
-         on htmx:afterOnLoad
-           call window.updateCacheInfo(event.detail.xhr.responseText)">
+    
+    <button _="on click call window.fetchWithProgress(true, false, 'tpl-graph')">
       📊 Gráfico
     </button>
-
-    <button 
-      hx-get="/api/pipelines?force=true&includeJobs=false"
-      hx-target="#content"
-      hx-ext="client-side-templates"
-      mustache-template="tpl-list"
-      _="on htmx:beforeRequest
-           put '<div class=loading><div class=spinner></div><p>Refrescando...</p></div>' into #content
-         on htmx:afterOnLoad
-           call window.updateCacheInfo(event.detail.xhr.responseText)">
+    
+    <button _="on click call window.fetchWithProgress(false, true, 'tpl-list')">
       🔄 Refresh
     </button>
   </nav>
 
-  <main id="content">
+  <main id="content" 
+        _="on load trigger click on first <button/> in <nav/>">
     <div class="loading">
       <div class="spinner"></div>
       <p>Inicializando...</p>
@@ -142,15 +119,16 @@
             {{^error}}
               <table>
                 <thead>
-                  <tr><th>Branch</th><th>Pipeline</th><th>Commit</th></tr>
+                  <tr><th>Proyecto</th><th>Branch</th><th>Pipeline</th><th>Commit</th></tr>
                 </thead>
                 <tbody>
                   {{#branches}}
                     <tr>
+                      <td><a href="{{url}}" target="_blank">{{../name}}</a></td>
                       <td><code>{{name}}</code></td>
                       {{#pipeline}}
                         <td><a href="{{web_url}}" target="_blank"><mark data-status="{{status}}">{{status}}</mark></a></td>
-                        <td><small title="{{commitTitle}}">{{commitShortId}}</small></td>
+                        <td><small title="{{../commitTitle}}">{{../commitShortId}}</small></td>
                       {{/pipeline}}
                       {{^pipeline}}
                         {{#error}}
@@ -178,7 +156,6 @@
       <section>
         <h2>{{serverName}}</h2>
         {{#projects}}
-          {{! Determine a project status badge based on branches (best-effort in template) }}
           <article>
             <h3><a href="{{url}}" target="_blank">{{name}}</a></h3>
             {{#error}}
@@ -187,7 +164,15 @@
             {{^error}}
               {{#branches}}
                 <details>
-                  <summary><code>{{name}}</code> {{#pipeline}}<mark data-status="{{status}}">{{status}}</mark>{{/pipeline}}{{^pipeline}}<mark data-status="none">No Pipeline</mark>{{/pipeline}}</summary>
+                  <summary>
+                    <code>{{name}}</code> 
+                    {{#pipeline}}
+                      <mark data-status="{{status}}">{{status}}</mark>
+                    {{/pipeline}}
+                    {{^pipeline}}
+                      <mark data-status="none">No Pipeline</mark>
+                    {{/pipeline}}
+                  </summary>
                   {{#pipeline}}
                     <div class="stages">
                       {{#stages}}
@@ -219,6 +204,21 @@
         {{/projects}}
       </section>
     {{/data}}
+  </script>
+
+  <!-- Loading State Template -->
+  <script id="tpl-loading" type="text/template">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>{{message}}</p>
+    </div>
+  </script>
+
+  <!-- Error State Template -->
+  <script id="tpl-error" type="text/template">
+    <div class="loading">
+      <p>❌ {{message}}</p>
+    </div>
   </script>
 
   <script src="/main.js" type="module"></script>

@@ -3,8 +3,10 @@ import { Project, Branch, Pipeline, ProjectConfig, GroupConfig } from './types';
 
 export class GitLabClient {
   private client: AxiosInstance;
+  private baseURL: string;
 
   constructor(baseURL: string, token: string) {
+    this.baseURL = baseURL;
     this.client = axios.create({
       baseURL: `${baseURL}/api/v4`,
       headers: {
@@ -12,6 +14,27 @@ export class GitLabClient {
       },
       timeout: 10000,
     });
+
+    // Add request interceptor for logging
+    this.client.interceptors.request.use((config) => {
+      const url = `${config.baseURL}${config.url}`;
+      console.log(`  → ${config.method?.toUpperCase()} ${url}`);
+      return config;
+    });
+
+    // Add response interceptor for logging
+    this.client.interceptors.response.use(
+      (response) => {
+        console.log(`  ← ${response.status} ${response.statusText} (${response.data?.length || 'N/A'} items)`);
+        return response;
+      },
+      (error) => {
+        if (axios.isAxiosError(error)) {
+          console.error(`  ← ${error.response?.status || 'ERR'} ${error.response?.statusText || error.message}`);
+        }
+        return Promise.reject(error);
+      }
+    );
   }
 
   async getProject(config: ProjectConfig): Promise<Project> {

@@ -11,6 +11,28 @@ const PORT = 3001;
 const config = loadConfig();
 const cache = new CacheManager();
 
+// ============================================================================
+// LOGGING UTILITIES
+// ============================================================================
+
+function logRequest(method: string, path: string, params?: any) {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] 📨 ${method} ${path}`, params ? JSON.stringify(params) : '');
+}
+
+function logGitLab(action: string, details: string) {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] 🦊 GitLab: ${action} - ${details}`);
+}
+
+function logError(context: string, error: Error) {
+  const timestamp = new Date().toISOString();
+  console.error(`[${timestamp}] ❌ Error in ${context}:`, error.message);
+  if (error.stack) {
+    console.error(error.stack);
+  }
+}
+
 /**
  * Check if project should be excluded based on config
  */
@@ -35,18 +57,22 @@ async function fetchPipelineData(includeJobs: boolean = false): Promise<TreeData
   const allData: TreeData[] = [];
 
   for (const server of config.servers) {
+    logGitLab('Connecting', `${server.name} (${server.url})`);
     const client = new GitLabClient(server.url, server.token);
     const projects: ProjectTreeNode[] = [];
     const allProjectConfigs: ProjectConfig[] = [];
 
     if (server.projects && server.projects.length > 0) {
+      logGitLab('Projects', `Loading ${server.projects.length} configured projects from ${server.name}`);
       allProjectConfigs.push(...server.projects);
     }
 
     if (server.groups && server.groups.length > 0) {
+      logGitLab('Groups', `Fetching ${server.groups.length} groups from ${server.name}`);
       for (const groupConfig of server.groups) {
         try {
           const groupProjects = await client.getGroupProjects(groupConfig);
+          logGitLab('Group fetched', `${groupProjects.length} projects in group ${groupConfig.path || groupConfig.id}`);
           const projectConfigs = groupProjects.map((project) => ({
             id: project.id,
             name: project.name,
@@ -54,6 +80,7 @@ async function fetchPipelineData(includeJobs: boolean = false): Promise<TreeData
           }));
           allProjectConfigs.push(...projectConfigs);
         } catch (error) {
+          logError(`Fetch group ${groupConfig.path || groupConfig.id}`, error as Error);
           projects.push({
             name: groupConfig.name || groupConfig.path || `Group ${groupConfig.id}`,
             path: groupConfig.path || `Group ID: ${groupConfig.id}`,
@@ -68,12 +95,16 @@ async function fetchPipelineData(includeJobs: boolean = false): Promise<TreeData
     for (const projectConfig of allProjectConfigs) {
       try {
         const project = await client.getProject(projectConfig);
+        logGitLab('Project', `Fetched ${project.path_with_namespace}`);
 
         if (isProjectExcluded(project.name, project.path_with_namespace)) {
+          logGitLab('Project excluded', project.path_with_namespace);
           continue;
         }
 
         const branches = await client.getBranches(project.id);
+        logGitLab('Branches', `${branches.length} branches in ${project.path_with_namespace}`);
+        
         const branchData = await Promise.all(
           branches.map(async (branch) => {
             try {
@@ -81,6 +112,7 @@ async function fetchPipelineData(includeJobs: boolean = false): Promise<TreeData
 
               if (includeJobs && pipeline) {
                 const jobs = await client.getPipelineJobs(project.id, pipeline.id);
+                logGitLab('Jobs', `${jobs.length} jobs in pipeline ${pipeline.id} for ${project.path_with_namespace}/${branch.name}`);
                 pipeline.jobs = jobs;
               }
 
@@ -91,6 +123,7 @@ async function fetchPipelineData(includeJobs: boolean = false): Promise<TreeData
                 pipeline: pipeline || undefined,
               };
             } catch (error) {
+              logError(`Fetch pipeline for ${project.path_with_namespace}/${branch.name}`, error as Error);
               return {
                 name: branch.name,
                 error: (error as Error).message,
@@ -106,6 +139,7 @@ async function fetchPipelineData(includeJobs: boolean = false): Promise<TreeData
           branches: branchData,
         });
       } catch (error) {
+        logError(`Fetch project ${projectConfig.path || projectConfig.id}`, error as Error);
         projects.push({
           name: projectConfig.name || projectConfig.path || `Project ${projectConfig.id}`,
           path: projectConfig.path || `Project ID: ${projectConfig.id}`,
@@ -131,6 +165,8 @@ async function fetchPipelineData(includeJobs: boolean = false): Promise<TreeData
 app.get('/api/pipelines', async (req: Request, res: Response) => {
   const force = req.query.force === 'true';
   const includeJobs = req.query.includeJobs === 'true';
+  
+  logRequest('GET', '/api/pipelines', { force, includeJobs });
 
   try {
     let data: TreeData[] | null = null;
@@ -139,10 +175,15 @@ app.get('/api/pipelines', async (req: Request, res: Response) => {
     data = cache.get(force, includeJobs);
 
     if (!data) {
+      console.log(`💾 Cache miss - fetching fresh data (includeJobs=${includeJobs})`);
       const startTime = Date.now();
       data = await fetchPipelineData(includeJobs);
       duration = Date.now() - startTime;
       cache.set(data, includeJobs, duration);
+      console.log(`✅ Fetch completed in ${(duration / 1000).toFixed(2)}s`);
+    } else {
+      const cacheAge = cache.getAge(includeJobs);
+      console.log(`💾 Cache hit - serving cached data (age: ${cacheAge}s)`);
     }
 
     const cacheAge = cache.getAge(includeJobs);
@@ -157,7 +198,7 @@ app.get('/api/pipelines', async (req: Request, res: Response) => {
       timestamp: Date.now(),
     });
   } catch (error) {
-    console.error('Error fetching pipeline data:', error);
+    logError('/api/pipelines', error as Error);
     res.status(500).json({
       error: 'Failed to fetch pipeline data',
       message: (error as Error).message,
@@ -171,6 +212,8 @@ app.get('/api/pipelines', async (req: Request, res: Response) => {
 app.get('/api/pipelines/stream', async (req: Request, res: Response) => {
   const force = req.query.force === 'true';
   const includeJobs = req.query.includeJobs === 'true';
+  
+  logRequest('GET', '/api/pipelines/stream', { force, includeJobs });
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -185,6 +228,7 @@ app.get('/api/pipelines/stream', async (req: Request, res: Response) => {
     let data = cache.get(force, includeJobs);
 
     if (data) {
+      console.log(`💾 SSE: Cache hit - streaming cached data`);
       send('complete', {
         data,
         cached: true,
@@ -194,6 +238,8 @@ app.get('/api/pipelines/stream', async (req: Request, res: Response) => {
       res.end();
       return;
     }
+    
+    console.log(`💾 SSE: Cache miss - streaming fresh data`);
 
     const startTime = Date.now();
     const allData: TreeData[] = [];
@@ -310,15 +356,18 @@ app.get('/api/pipelines/stream', async (req: Request, res: Response) => {
 
     const duration = Date.now() - startTime;
     cache.set(allData, includeJobs, duration);
+    console.log(`✅ SSE: Fetch completed in ${(duration / 1000).toFixed(2)}s`);
 
     send('complete', { data: allData, cached: false, cacheDuration: duration / 1000 });
     res.end();
   } catch (error) {
+    logError('/api/pipelines/stream', error as Error);
     send('error', { message: (error as Error).message });
     res.end();
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`API server running on http://localhost:${PORT}`);
+  console.log(`\n🚀 API Server running on http://localhost:${PORT}`);
+  console.log(`📡 Monitoring ${config.servers.length} GitLab server(s)\n`);
 });

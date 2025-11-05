@@ -5,6 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc && npx vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "npm run typecheck",
     "prestart": "npm run build",
     "start": "node dist/index.js",
     "dev": "concurrently \"npx tsx src/api-server.ts\" \"npx vite\"",

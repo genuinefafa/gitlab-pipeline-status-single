@@ -1,0 +1,19 @@
+{{! Template for a full server section with all projects }}
+{{! Used by: GET /api/servers/:serverName }}
+<section id="server-{{safeServerId}}"
+         hx-get="/api/servers/{{serverName}}"
+         hx-trigger="every 30m"
+         hx-target="this"
+         hx-swap="outerHTML"
+         hx-indicator="#spinner-server-{{safeServerId}}">
+  <h2>
+    {{serverName}}
+    <span id="spinner-server-{{safeServerId}}" class="htmx-indicator">⏳</span>
+  </h2>
+  {{#projects}}
+    {{{.}}}
+  {{/projects}}
+  {{^projects}}
+    <p><em>(no projects)</em></p>
+  {{/projects}}
+</section>

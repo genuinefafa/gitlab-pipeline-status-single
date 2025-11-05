@@ -5,11 +5,17 @@ import { CacheManager } from './cache';
 import { GitLabClient } from './gitlab';
 import { TreeData, ProjectTreeNode, ProjectConfig } from './types';
 import { loadConfig } from './config';
+import htmxRoutes from './api-routes-htmx';
 
 const app = express();
 const PORT = 3001;
 const config = loadConfig();
 const cache = new CacheManager();
+
+// ============================================================================
+// HTMX ROUTES - Multi-level cache with granular refresh
+// ============================================================================
+app.use('/api', htmxRoutes);
 
 // ============================================================================
 // LOGGING UTILITIES

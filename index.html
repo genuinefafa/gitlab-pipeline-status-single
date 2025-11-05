@@ -189,30 +189,28 @@
                 <details>
                   <summary><code>{{name}}</code> {{#pipeline}}<mark data-status="{{status}}">{{status}}</mark>{{/pipeline}}{{^pipeline}}<mark data-status="none">No Pipeline</mark>{{/pipeline}}</summary>
                   {{#pipeline}}
-                    {{#stages}}
-                      <div class="stages">
-                        {{#stages}}
-                          <div class="stage">
-                            <h4>{{name}}</h4>
-                            <div class="jobs">
-                              {{#jobs}}
-                                <a class="job-badge {{status}}" href="{{web_url}}" target="_blank" title="{{stage}}: {{name}} ({{status}})">{{name}}</a>
-                              {{/jobs}}
-                              {{^jobs}}
-                                <small><em>No jobs</em></small>
-                              {{/jobs}}
-                            </div>
+                    <div class="stages">
+                      {{#stages}}
+                        <div class="stage">
+                          <h4>{{name}}</h4>
+                          <div class="jobs">
+                            {{#jobs}}
+                              <a class="job-badge {{status}}" href="{{web_url}}" target="_blank" title="{{stage}}: {{name}} ({{status}})">{{name}}</a>
+                            {{/jobs}}
+                            {{^jobs}}
+                              <small><em>No jobs</em></small>
+                            {{/jobs}}
                           </div>
-                        {{/stages}}
-                      </div>
-                    {{/stages}}
-                    {{^stages}}
-                      <p><em>Jobs list:</em></p>
-                      <p>
-                        {{#jobs}}<a class="job-badge {{status}}" href="{{web_url}}" target="_blank" title="{{stage}}: {{name}} ({{status}})">{{name}}</a> {{/jobs}}
-                        {{^jobs}}<em>No jobs</em>{{/jobs}}
-                      </p>
-                    {{/stages}}
+                        </div>
+                      {{/stages}}
+                      {{^stages}}
+                        <p><em>Jobs list:</em></p>
+                        <p>
+                          {{#jobs}}<a class="job-badge {{status}}" href="{{web_url}}" target="_blank" title="{{stage}}: {{name}} ({{status}})">{{name}}</a> {{/jobs}}
+                          {{^jobs}}<em>No jobs</em>{{/jobs}}
+                        </p>
+                      {{/stages}}
+                    </div>
                   {{/pipeline}}
                 </details>
               {{/branches}}

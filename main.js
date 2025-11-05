@@ -26,7 +26,7 @@
 window.updateCacheInfo = function (responseText) {
   const response = JSON.parse(responseText);
   const cacheInfo = document.getElementById('cache-info');
-  
+
   if (response.cached && response.cacheAge !== null) {
     let text = `📦 Caché (hace ${response.cacheAge}s)`;
     if (response.cacheDuration) {

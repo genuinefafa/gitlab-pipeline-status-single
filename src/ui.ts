@@ -167,7 +167,7 @@ export class UI {
       this.filterBox.hidden = true;
       this.box.focus();
 
-      if (!err && value !== null) {
+      if (!err && typeof value === 'string') {
         this.projectFilter = value.trim();
         if (this.onRefreshCallback) {
           this.onRefreshCallback();

@@ -4,7 +4,7 @@
          hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=true&view=chart&contentOnly=true"
          hx-trigger="every 5s, refresh from:body"
          hx-disabled="true"
-         hx-on:toggle="this.toggleAttribute('hx-disabled', !this.open)"
+         hx-on:toggle="this.toggleAttribute('hx-disabled', !this.open); (function(){var s=document.getElementById('summary-{{safeId}}'); if(s){ s.toggleAttribute('hx-disabled', !!document.querySelector('details[data-branch-id=\'{{safeId}}\']')?.open); }})()"
          hx-target="#content-{{safeId}}"
          hx-swap="innerHTML"
          hx-indicator="#spinner-{{safeId}}">

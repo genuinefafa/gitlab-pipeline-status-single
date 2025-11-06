@@ -20,6 +20,7 @@ function logRequest(method: string, path: string, params?: any) {
 
 /**
  * Group jobs by stage, preserving the order in which stages first appear
+ * NOTE: GitLab returns jobs in reverse stage order, so we reverse the final array
  */
 function groupJobsByStage(jobs: any[]): { stages: any[]; hasStages: boolean } {
   if (!jobs || jobs.length === 0) {
@@ -39,11 +40,12 @@ function groupJobsByStage(jobs: any[]): { stages: any[]; hasStages: boolean } {
     stageMap.get(stageName)!.push(job);
   });
   
-  // Create stages array in the order they first appeared
+  // Create stages array in the order they first appeared, then reverse
+  // because GitLab API returns jobs in reverse chronological order
   const stages = stageOrder.map(stageName => ({
     name: stageName,
     jobs: stageMap.get(stageName)!
-  }));
+  })).reverse();
   
   return { stages, hasStages: stages.length > 0 };
 }

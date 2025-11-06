@@ -399,6 +399,16 @@
         });
       });
     })();
+
+    // Periodic refresh for OPEN branches only (every 5s)
+    setInterval(function(){
+      document.querySelectorAll('details[open] div[id^="content-"]').forEach(function(el){
+        // Trigger only if element is in the DOM and not currently swapping
+        if (el && (!el.classList || !el.classList.contains('htmx-request'))) {
+          htmx.trigger(el, 'refresh-now');
+        }
+      });
+    }, 5000);
   </script>
 </body>
 </html>

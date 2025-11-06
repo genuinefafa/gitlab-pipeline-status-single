@@ -25,7 +25,7 @@
   
   <div id="content-{{safeId}}"
     hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=true&view=chart&contentOnly=true"
-    hx-trigger="every 5s, refresh-now"
+    hx-trigger="refresh-now"
     hx-disabled
     hx-on:refresh from:body="if (this.closest('details') && this.closest('details').open) { htmx.trigger(this,'refresh-now') }"
     hx-swap="innerHTML"

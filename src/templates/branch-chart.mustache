@@ -5,14 +5,11 @@
            var d=document.querySelector('details[data-branch-id=\'{{safeId}}\']');
            var s=document.getElementById('summary-{{safeId}}');
            var c=document.getElementById('content-{{safeId}}');
-           if(s){ s.toggleAttribute('hx-disabled', !!d && d.open); }
+           var isOpen = !!d && d.open;
+           if(s){ s.toggleAttribute('hx-disabled', isOpen); }
            if(c){
-             if(d && d.open){
-               if(!c.getAttribute('hx-get')){ c.setAttribute('hx-get', c.getAttribute('data-url')); }
-               htmx.trigger(c,'refresh-now');
-             } else {
-               c.removeAttribute('hx-get');
-             }
+             c.toggleAttribute('hx-disabled', !isOpen);
+             if(isOpen){ setTimeout(function(){ htmx.trigger(c,'refresh-now'); }, 0); }
            }
          })()">
   <summary>
@@ -37,8 +34,9 @@
   </summary>
   
   <div id="content-{{safeId}}"
-    data-url="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=true&view=chart&contentOnly=true"
+    hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=true&view=chart&contentOnly=true"
     hx-trigger="refresh-now"
+    hx-disabled
     hx-on:refresh from:body="if (this.closest('details') && this.closest('details').open) { htmx.trigger(this,'refresh-now') }"
     hx-swap="innerHTML"
     hx-indicator="#spinner-{{safeId}}">

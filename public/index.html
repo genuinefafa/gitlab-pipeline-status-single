@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitLab Pipeline Monitor</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  
+  <!-- Sakura.css - Classless CSS framework -->
+  <link rel="stylesheet" href="https://unpkg.com/sakura.css/css/sakura.css" type="text/css">
+  
+  <style>
+    body {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1rem;
+    }
+    
+    .hero {
+      text-align: center;
+      padding: 3rem 1rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 8px;
+      margin-bottom: 2rem;
+    }
+    
+    .hero h1 {
+      margin: 0;
+      font-size: 2.5rem;
+      color: white;
+    }
+    
+    .hero p {
+      margin: 1rem 0 0 0;
+      font-size: 1.1rem;
+      opacity: 0.9;
+    }
+    
+    .nav-buttons {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-top: 2rem;
+      flex-wrap: wrap;
+    }
+    
+    .nav-buttons a {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background: white;
+      color: #667eea;
+      text-decoration: none;
+      border-radius: 4px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .nav-buttons a:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+    
+    .feature-card {
+      padding: 1.5rem;
+      background: #f9fafb;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+    
+    .feature-card h3 {
+      margin-top: 0;
+      color: #667eea;
+    }
+    
+    .feature-card p {
+      margin-bottom: 0;
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>🚀 GitLab Pipeline Monitor</h1>
+    <p>Monitoreo en tiempo real de tus pipelines de GitLab</p>
+    <div class="nav-buttons">
+      <a href="/list">📋 Vista de Lista</a>
+      <a href="/chart">📊 Vista de Gráfico</a>
+    </div>
+  </div>
+
+  <div class="features">
+    <div class="feature-card">
+      <h3>⚡ Multi-level Cache</h3>
+      <p>Sistema de caché inteligente de 3 niveles para máximo rendimiento</p>
+    </div>
+    
+    <div class="feature-card">
+      <h3>🔄 Auto-refresh</h3>
+      <p>Actualizaciones automáticas granulares sin recargar la página</p>
+    </div>
+    
+    <div class="feature-card">
+      <h3>📱 Responsive</h3>
+      <p>Diseño adaptable para cualquier dispositivo</p>
+    </div>
+    
+    <div class="feature-card">
+      <h3>🎨 Jobs Detallados</h3>
+      <p>Visualización clara del estado de cada job del pipeline</p>
+    </div>
+  </div>
+  
+  <footer style="text-align: center; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 0.85rem;">
+    <p>Multi-level cache: L1 (30min) → L2 (5min) → L3 (5s)</p>
+  </footer>
+</body>
+</html>

@@ -8,9 +8,33 @@ import { loadConfig } from './config';
 import htmxRoutes from './api-routes-htmx';
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3000;
 const config = loadConfig();
 const cache = new CacheManager();
+
+// ============================================================================
+// STATIC FILES
+// ============================================================================
+app.use(express.static(join(__dirname, '../public')));
+
+// ============================================================================
+// HTML ROUTES - Clean URLs for different views
+// ============================================================================
+
+// Home page
+app.get('/', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, '../public/index.html'));
+});
+
+// List view
+app.get('/list', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, '../public/list.html'));
+});
+
+// Chart view
+app.get('/chart', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, '../public/chart.html'));
+});
 
 // ============================================================================
 // HTMX ROUTES - Multi-level cache with granular refresh

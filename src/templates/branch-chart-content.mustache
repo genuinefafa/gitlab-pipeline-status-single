@@ -42,8 +42,13 @@
   {{/hasJobs}}
   {{^hasJobs}}
     <div class="pipeline-stages">
-      <p><em>Pipeline sin jobs</em></p>
-      <p style="color:#6b7280; font-size:0.8rem"><small>Actualizado <span class="refresh-time" data-timestamp="{{lastRefresh}}">recién</span></small></p>
+      {{#jobsWereRequested}}
+        <p><em>Pipeline sin jobs</em></p>
+        <p style="color:#6b7280; font-size:0.8rem"><small>Actualizado <span class="refresh-time" data-timestamp="{{lastRefresh}}">recién</span></small></p>
+      {{/jobsWereRequested}}
+      {{^jobsWereRequested}}
+        <p><em>⏳ Cargando jobs...</em></p>
+      {{/jobsWereRequested}}
     </div>
   {{/hasJobs}}
 {{/pipeline}}

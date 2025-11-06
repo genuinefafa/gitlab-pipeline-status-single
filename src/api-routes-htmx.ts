@@ -179,6 +179,10 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
     // Group jobs by stage if available
     const { stages, hasStages } = groupJobsByStage(pipeline?.jobs || []);
     
+    // Determine if we actually fetched jobs or are showing placeholder data
+    // jobsWereRequested = true means we asked for jobs (includeJobs=true) and got a definitive answer
+    const jobsWereRequested = includeJobs && (cacheResult.data !== null || !isRefreshing);
+    
     // Choose template based on view mode and contentOnly flag
     let templateName = 'branch-row';
     if (viewMode === 'chart') {
@@ -207,6 +211,7 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
       hasJobs: pipeline?.jobs && pipeline.jobs.length > 0,
       stages,
       hasStages,
+      jobsWereRequested,
       commitTitle: branchMeta?.commitTitle || pipeline?.ref || '',
       commitShortId: branchMeta?.commitShortId || (pipeline?.sha ? pipeline.sha.substring(0,8) : ''),
     });
@@ -312,6 +317,9 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
         // Group jobs by stage if available
         const { stages, hasStages } = groupJobsByStage(cachedPipeline?.jobs || []);
         
+        // jobsWereRequested = true means we asked for jobs and got a definitive answer
+        const jobsWereRequested = includeJobs && pipelineResult.data !== null;
+        
         // Each branch row will have its own htmx polling
         return renderTemplate(branchTemplateName, {
           projectPath,
@@ -327,6 +335,7 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
           hasJobs: cachedPipeline?.jobs && cachedPipeline.jobs.length > 0,
           stages,
           hasStages,
+          jobsWereRequested,
           commitTitle: branch.commitTitle,
           commitShortId: branch.commitShortId,
         });
@@ -513,6 +522,9 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
               // Group jobs by stage if available
               const { stages, hasStages } = groupJobsByStage(cachedPipeline?.jobs || []);
               
+              // jobsWereRequested = false because we're rendering initial state with includeJobs=false
+              const jobsWereRequested = false;
+              
               return renderTemplate(branchTemplateName, {
                 projectPath: project.path,
                 branchName: branch.name,
@@ -527,6 +539,7 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
                 hasJobs: cachedPipeline?.jobs && cachedPipeline.jobs.length > 0,
                 stages,
                 hasStages,
+                jobsWereRequested,
                 commitTitle: branch.commitTitle,
                 commitShortId: branch.commitShortId,
               });

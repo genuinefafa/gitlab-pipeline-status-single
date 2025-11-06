@@ -80,7 +80,12 @@
       {{/hasJobs}}
       {{^hasJobs}}
         <div class="pipeline-stages">
-          <p><em>Pipeline sin jobs</em></p>
+          {{#jobsWereRequested}}
+            <p><em>Pipeline sin jobs</em></p>
+          {{/jobsWereRequested}}
+          {{^jobsWereRequested}}
+            <p><em>⏳ Cargando jobs...</em></p>
+          {{/jobsWereRequested}}
         </div>
       {{/hasJobs}}
     {{/pipeline}}

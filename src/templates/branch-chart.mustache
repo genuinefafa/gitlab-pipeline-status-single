@@ -2,18 +2,21 @@
 {{! Used by: GET /api/branches/:projectPath/:branchName?view=chart }}
 <details data-branch-id="{{safeId}}"
          hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=true&view=chart&contentOnly=true"
-         hx-trigger="every 5s [if this.open], refresh from:body"
+         hx-trigger="every 5s, refresh from:body"
+         hx-disabled="true"
+         hx-on:toggle="this.toggleAttribute('hx-disabled', !this.open)"
          hx-target="#content-{{safeId}}"
          hx-swap="innerHTML"
          hx-indicator="#spinner-{{safeId}}">
   <summary>
     <code>{{branchName}}</code>
     <span id="summary-{{safeId}}"
-          class="badges"
-          hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=false&view=chart&summaryOnly=true"
-          hx-trigger="every 10s [if !this.closest('details').open], refresh from:body"
-          hx-target="#summary-{{safeId}}"
-          hx-swap="outerHTML">
+      class="badges"
+      hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=false&view=chart&summaryOnly=true"
+      hx-trigger="every 10s, refresh from:body"
+      hx-on:toggle from:closest="details"="this.toggleAttribute('hx-disabled', this.closest('details').open)"
+      hx-target="#summary-{{safeId}}"
+      hx-swap="outerHTML">
       {{#pipeline}}
         <mark data-status="{{status}}">{{statusText}}</mark>
         <span class="commit-info" title="{{../commitTitle}}">{{../commitShortId}}</span>

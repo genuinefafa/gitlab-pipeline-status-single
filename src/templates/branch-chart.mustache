@@ -1,7 +1,20 @@
 {{! Template for chart view - branch with pipeline stages }}
 {{! Used by: GET /api/branches/:projectPath/:branchName?view=chart }}
 <details data-branch-id="{{safeId}}"
-         hx-on:toggle="(function(){var d=document.querySelector('details[data-branch-id=\'{{safeId}}\']');var s=document.getElementById('summary-{{safeId}}');var c=document.getElementById('content-{{safeId}}'); if(s){ s.toggleAttribute('hx-disabled', !!d && d.open); } if(c){ c.toggleAttribute('hx-disabled', !(!!d && d.open)); if(d && d.open){ htmx.trigger(c,'refresh-now'); } } })()">
+         hx-on:toggle="(function(){
+           var d=document.querySelector('details[data-branch-id=\'{{safeId}}\']');
+           var s=document.getElementById('summary-{{safeId}}');
+           var c=document.getElementById('content-{{safeId}}');
+           if(s){ s.toggleAttribute('hx-disabled', !!d && d.open); }
+           if(c){
+             if(d && d.open){
+               if(!c.getAttribute('hx-get')){ c.setAttribute('hx-get', c.getAttribute('data-url')); }
+               htmx.trigger(c,'refresh-now');
+             } else {
+               c.removeAttribute('hx-get');
+             }
+           }
+         })()">
   <summary>
     <code>{{branchName}}</code>
     <span id="summary-{{safeId}}"
@@ -24,9 +37,8 @@
   </summary>
   
   <div id="content-{{safeId}}"
-    hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=true&view=chart&contentOnly=true"
+    data-url="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=true&view=chart&contentOnly=true"
     hx-trigger="refresh-now"
-    hx-disabled
     hx-on:refresh from:body="if (this.closest('details') && this.closest('details').open) { htmx.trigger(this,'refresh-now') }"
     hx-swap="innerHTML"
     hx-indicator="#spinner-{{safeId}}">

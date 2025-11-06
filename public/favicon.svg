@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="#FC6D26" stroke="#E24329" stroke-width="2"/>
+  
+  <!-- Pipeline icon - three connected circles representing stages -->
+  <g fill="#FFFFFF" stroke="#FFFFFF" stroke-width="2">
+    <!-- Stage 1 -->
+    <circle cx="25" cy="50" r="8"/>
+    
+    <!-- Stage 2 -->
+    <circle cx="50" cy="50" r="8"/>
+    
+    <!-- Stage 3 -->
+    <circle cx="75" cy="50" r="8"/>
+    
+    <!-- Connecting lines -->
+    <line x1="33" y1="50" x2="42" y2="50" stroke-width="3"/>
+    <line x1="58" y1="50" x2="67" y2="50" stroke-width="3"/>
+    
+    <!-- Success checkmark in last stage -->
+    <path d="M 72 47 L 75 52 L 81 43" fill="none" stroke="#FFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  
+  <!-- Small "GL" text at top for GitLab branding -->
+  <text x="50" y="25" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">GL</text>
+</svg>

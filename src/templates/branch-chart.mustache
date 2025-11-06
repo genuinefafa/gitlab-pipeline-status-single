@@ -2,13 +2,18 @@
 {{! Used by: GET /api/branches/:projectPath/:branchName?view=chart }}
 <details data-branch-id="{{safeId}}"
          hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=true&view=chart&contentOnly=true"
-         hx-trigger="every 10s"
+         hx-trigger="every 5s [if this.open], refresh from:body"
          hx-target="#content-{{safeId}}"
          hx-swap="innerHTML"
          hx-indicator="#spinner-{{safeId}}">
   <summary>
     <code>{{branchName}}</code>
-    <div class="badges">
+    <span id="summary-{{safeId}}"
+          class="badges"
+          hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=false&view=chart&summaryOnly=true"
+          hx-trigger="every 10s [if !this.closest('details').open], refresh from:body"
+          hx-target="#summary-{{safeId}}"
+          hx-swap="outerHTML">
       {{#pipeline}}
         <mark data-status="{{status}}">{{statusText}}</mark>
         <span class="commit-info" title="{{../commitTitle}}">{{../commitShortId}}</span>
@@ -18,7 +23,7 @@
         <mark data-status="none">No Pipeline</mark>
         <span id="spinner-{{safeId}}" class="htmx-indicator">⏳</span>
       {{/pipeline}}
-    </div>
+    </span>
   </summary>
   
   <div id="content-{{safeId}}">

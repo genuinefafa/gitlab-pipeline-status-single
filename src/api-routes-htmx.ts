@@ -97,6 +97,7 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
   const includeJobs = req.query.includeJobs === 'true';
   const viewMode = req.query.view === 'chart' ? 'chart' : 'list';
   const contentOnly = req.query.contentOnly === 'true';
+  const summaryOnly = req.query.summaryOnly === 'true';
   
   logRequest('GET', `/api/branches/${projectPath}/${branchName}`, { includeJobs, viewMode, contentOnly });
 
@@ -162,7 +163,13 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
     // Choose template based on view mode and contentOnly flag
     let templateName = 'branch-row';
     if (viewMode === 'chart') {
-      templateName = contentOnly ? 'branch-chart-content' : 'branch-chart';
+      if (contentOnly) {
+        templateName = 'branch-chart-content';
+      } else if (summaryOnly) {
+        templateName = 'branch-chart-summary';
+      } else {
+        templateName = 'branch-chart';
+      }
     } else if (viewMode === 'list') {
       templateName = contentOnly ? 'branch-row-content' : 'branch-row';
     }

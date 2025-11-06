@@ -57,12 +57,7 @@
       transition: background 0.2s;
     }
     
-    nav a.active {
-      background: #2563eb;
-      color: white;
-    }
-    
-    nav a:not(.active):hover {
+    nav a:hover {
       background: #f3f4f6;
     }
     
@@ -294,16 +289,10 @@
   </header>
 
   <nav>
-    <a href="/">🏠 Inicio</a>
-    <a href="/list">📋 Lista</a>
-    <a href="/chart" class="active">📊 Gráfico</a>
+    <a href="/about">ℹ️ About</a>
     <div class="divider"></div>
-    <button id="refresh-btn"
-            hx-get="/api/servers/Starhopper?force=true&view=chart"
-            hx-target="#content"
-            hx-swap="innerHTML"
-            hx-indicator="#refresh-spinner">
-      � Refresh
+    <button id="refresh-btn">
+      🔄 Refresh
     </button>
     <span id="refresh-spinner" class="htmx-indicator">⏳</span>
   </nav>
@@ -332,5 +321,67 @@
       Powered by htmx + Mustache templates
     </p>
   </footer>
+
+  <script>
+    // SSE-driven refresh: request server refresh, then notify UI to update selectively
+    (function(){
+      const btn = document.getElementById('refresh-btn');
+      const spinner = document.getElementById('refresh-spinner');
+      const cacheInfo = document.getElementById('cache-info');
+      let es = null;
+
+      function setLoading(loading, msg){
+        if (loading){
+          btn.setAttribute('disabled', 'true');
+          spinner.style.display = 'inline';
+          if (msg && cacheInfo) cacheInfo.textContent = msg;
+        } else {
+          btn.removeAttribute('disabled');
+          spinner.style.display = 'none';
+        }
+      }
+
+      function dispatchRefresh(){
+        // Single broadcast: elements with hx-trigger="... refresh from:body" will react
+        const ev = new Event('refresh', { bubbles: true });
+        document.body.dispatchEvent(ev);
+      }
+
+      btn.addEventListener('click', function(){
+        // avoid multiple concurrent streams
+        if (es) {
+          try { es.close(); } catch(e){}
+          es = null;
+        }
+        setLoading(true, '🔄 Actualizando datos…');
+        // Ask server to refresh L1/L2 without jobs; jobs will be fetched per opened branch
+        es = new EventSource('/api/pipelines/stream?force=true&includeJobs=false');
+        es.addEventListener('progress', function(e){
+          try {
+            const data = JSON.parse(e.data);
+            if (cacheInfo && data && data.message){ cacheInfo.textContent = data.message; }
+          } catch(err){}
+        });
+        es.addEventListener('complete', function(e){
+          try {
+            const result = JSON.parse(e.data);
+            if (result && result.cacheDuration){
+              cacheInfo.textContent = 'Refrescado en ' + result.cacheDuration.toFixed(1) + 's';
+            }
+          } catch(err){}
+          setLoading(false);
+          dispatchRefresh();
+          es.close();
+          es = null;
+        });
+        es.addEventListener('error', function(){
+          setLoading(false);
+          if (cacheInfo) cacheInfo.textContent = '⚠️ Error al actualizar';
+          try { es.close(); } catch(e){}
+          es = null;
+        });
+      });
+    })();
+  </script>
 </body>
 </html>

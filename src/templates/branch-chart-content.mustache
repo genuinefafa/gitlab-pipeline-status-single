@@ -1,0 +1,52 @@
+{{! Template for branch chart content only (for updates without recreating the details element) }}
+{{#pipeline}}
+  {{#hasJobs}}
+    {{#hasStages}}
+      <div class="pipeline-stages">
+        <div class="stages-container">
+          {{#stages}}
+            <div class="stage">
+              <div class="stage-header">{{name}}</div>
+              <div class="stage-jobs">
+                {{#jobs}}
+                  <a href="{{web_url}}" 
+                     target="_blank" 
+                     class="job-item" 
+                     data-status="{{status}}"
+                     title="{{name}} - {{status}}">
+                    {{name}}
+                  </a>
+                {{/jobs}}
+              </div>
+            </div>
+          {{/stages}}
+        </div>
+      </div>
+    {{/hasStages}}
+    {{^hasStages}}
+      <div class="jobs-list">
+        {{#jobs}}
+          <a href="{{web_url}}" 
+             target="_blank" 
+             class="job-item" 
+             data-status="{{status}}"
+             title="{{name}} - {{status}}">
+            {{name}}
+          </a>
+        {{/jobs}}
+      </div>
+    {{/hasStages}}
+  {{/hasJobs}}
+  {{^hasJobs}}
+    <div class="pipeline-stages">
+      <p><em>Pipeline sin jobs</em></p>
+    </div>
+  {{/hasJobs}}
+{{/pipeline}}
+{{^pipeline}}
+  {{#error}}
+    <div class="pipeline-stages">
+      <p><em>Error: {{.}}</em></p>
+    </div>
+  {{/error}}
+{{/pipeline}}

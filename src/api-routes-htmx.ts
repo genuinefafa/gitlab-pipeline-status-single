@@ -477,7 +477,7 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
           branchRowsHtml = await Promise.all(
             branches.map(async (branch) => {
               // Try to get pipeline from cache
-              const pipelineResult = cache.getPipeline(project.path, branch.name, true);
+              const pipelineResult = cache.getPipeline(project.path, branch.name, false);
               const cachedPipeline = pipelineResult.data;
               
               // Group jobs by stage if available
@@ -487,7 +487,7 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
                 projectPath: project.path,
                 branchName: branch.name,
                 safeId: generateSafeId(`${project.path}-${branch.name}`),
-                includeJobs: true,
+                includeJobs: false,
                 lastRefresh: Date.now(),
                 isRefreshing: pipelineResult.isStale,
                 pipeline: cachedPipeline ? {

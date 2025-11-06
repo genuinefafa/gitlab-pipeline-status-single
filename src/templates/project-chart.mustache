@@ -19,8 +19,8 @@
         {{{.}}}
       {{/branches}}
       {{^branches}}
-        <div style="padding: 1rem;" 
-             hx-get="/api/projects/{{serverName}}/{{projectPath}}/branches?includeJobs=true&view=chart&rowsOnly=true"
+     <div style="padding: 1rem;" 
+       hx-get="/api/projects/{{serverName}}/{{projectPath}}/branches?includeJobs=false&view=chart&rowsOnly=true"
              hx-trigger="load"
              hx-target="#branches-chart-{{safeProjectId}}"
              hx-swap="innerHTML"

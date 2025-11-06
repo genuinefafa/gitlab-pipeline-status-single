@@ -2,7 +2,7 @@
 {{! Used by: GET /api/branches/:projectPath/:branchName?view=chart }}
 <details data-branch-id="{{safeId}}"
          hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=true&view=chart&contentOnly=true"
-         hx-trigger="every 5s, refresh from:body"
+         hx-trigger="every 5s"
          hx-disabled="true"
          hx-on:toggle="this.toggleAttribute('hx-disabled', !this.open); (function(){var s=document.getElementById('summary-{{safeId}}'); if(s){ s.toggleAttribute('hx-disabled', !!document.querySelector('details[data-branch-id=\'{{safeId}}\']')?.open); }})()"
          hx-target="#content-{{safeId}}"

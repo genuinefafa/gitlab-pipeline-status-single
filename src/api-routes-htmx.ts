@@ -305,9 +305,19 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
     // Render each branch row/item (which will then auto-refresh independently)
     const branchRowsHtml = await Promise.all(
       branches.map(async (branch) => {
-        // Try to get pipeline from cache
-        const pipelineResult = cache.getPipeline(projectPath, branch.name, includeJobs);
-        const cachedPipeline = pipelineResult.data;
+        // Try to get pipeline from cache (prefer includeJobs=false for initial render)
+        let pipelineResult = cache.getPipeline(projectPath, branch.name, includeJobs);
+        let cachedPipeline = pipelineResult.data;
+        let isRefreshing = pipelineResult.isStale;
+
+        // Fallback: if requesting without jobs and no cache, reuse includeJobs=true cache to avoid "No Pipeline"
+        if (!cachedPipeline && includeJobs === false) {
+          const alt = cache.getPipeline(projectPath, branch.name, true);
+          if (alt.data) {
+            cachedPipeline = alt.data;
+            isRefreshing = isRefreshing || alt.isStale;
+          }
+        }
         
         // Group jobs by stage if available
         const { stages, hasStages } = groupJobsByStage(cachedPipeline?.jobs || []);
@@ -319,7 +329,7 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
           safeId: generateSafeId(`${projectPath}-${branch.name}`),
           includeJobs,
           lastRefresh: Date.now(),
-          isRefreshing: pipelineResult.isStale,
+          isRefreshing,
           pipeline: cachedPipeline ? {
             ...cachedPipeline,
             statusText: formatStatus(cachedPipeline.status),

@@ -10,12 +10,42 @@ const config = loadConfig();
 const cache = new MultiLevelCacheManager();
 
 // ============================================================================
-// LOGGING UTILITIES
+// UTILITY FUNCTIONS
 // ============================================================================
 
 function logRequest(method: string, path: string, params?: any) {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] 📨 ${method} ${path}`, params ? JSON.stringify(params) : '');
+}
+
+/**
+ * Group jobs by stage, preserving the order in which stages first appear
+ */
+function groupJobsByStage(jobs: any[]): { stages: any[]; hasStages: boolean } {
+  if (!jobs || jobs.length === 0) {
+    return { stages: [], hasStages: false };
+  }
+  
+  // Group by stage preserving first occurrence order
+  const stageOrder: string[] = [];
+  const stageMap = new Map<string, any[]>();
+  
+  jobs.forEach((job: any) => {
+    const stageName = job.stage || 'default';
+    if (!stageMap.has(stageName)) {
+      stageMap.set(stageName, []);
+      stageOrder.push(stageName); // Track order of first occurrence
+    }
+    stageMap.get(stageName)!.push(job);
+  });
+  
+  // Create stages array in the order they first appeared
+  const stages = stageOrder.map(stageName => ({
+    name: stageName,
+    jobs: stageMap.get(stageName)!
+  }));
+  
+  return { stages, hasStages: stages.length > 0 };
 }
 
 function logCache(level: string, key: string, hit: boolean) {
@@ -63,8 +93,10 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
   const branchName = pathParts.pop() || '';
   const projectPath = pathParts.join('/');
   const includeJobs = req.query.includeJobs === 'true';
+  const viewMode = req.query.view === 'chart' ? 'chart' : 'list';
+  const contentOnly = req.query.contentOnly === 'true';
   
-  logRequest('GET', `/api/branches/${projectPath}/${branchName}`, { includeJobs });
+  logRequest('GET', `/api/branches/${projectPath}/${branchName}`, { includeJobs, viewMode, contentOnly });
 
   try {
     // Check L3 cache (5sec TTL)
@@ -112,16 +144,29 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
       logCache('3', `${projectPath}:${branchName}`, true);
     }
 
+    // Group jobs by stage if available
+    const { stages, hasStages } = groupJobsByStage(pipeline?.jobs || []);
+    
+    // Choose template based on view mode and contentOnly flag
+    let templateName = 'branch-row';
+    if (viewMode === 'chart') {
+      templateName = contentOnly ? 'branch-chart-content' : 'branch-chart';
+    }
+    
     // Render template
-    const html = renderTemplate('branch-row', {
+    const html = renderTemplate(templateName, {
       projectPath,
       branchName,
       safeId: generateSafeId(`${projectPath}-${branchName}`),
       includeJobs,
+      lastRefresh: Date.now(),
       pipeline: pipeline ? {
         ...pipeline,
         statusText: formatStatus(pipeline.status),
       } : undefined,
+      hasJobs: pipeline?.jobs && pipeline.jobs.length > 0,
+      stages,
+      hasStages,
       commitTitle: pipeline?.ref || '',
       commitShortId: pipeline?.sha?.substring(0, 8) || '',
     });
@@ -137,6 +182,7 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
       branchName,
       safeId: generateSafeId(`${projectPath}-${branchName}`),
       includeJobs,
+      lastRefresh: Date.now(),
       error: (error as Error).message,
     });
     
@@ -160,8 +206,10 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
   const serverName = req.params[0] || '';
   const projectPath = req.params[1] || '';
   const includeJobs = req.query.includeJobs === 'true';
+  const rowsOnly = req.query.rowsOnly === 'true';
+  const viewMode = req.query.view === 'chart' ? 'chart' : 'list';
   
-  logRequest('GET', `/api/projects/${serverName}/${projectPath}/branches`, { includeJobs });
+  logRequest('GET', `/api/projects/${serverName}/${projectPath}/branches`, { includeJobs, rowsOnly, viewMode });
 
   try {
     // Check L2 cache (5min TTL)
@@ -201,26 +249,49 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
       logCache('2', projectPath, true);
     }
 
-    // Render each branch row (which will then auto-refresh independently)
+    // Choose template based on view mode
+    const branchTemplateName = viewMode === 'chart' ? 'branch-chart' : 'branch-row';
+    
+    // Render each branch row/item (which will then auto-refresh independently)
     const branchRowsHtml = await Promise.all(
       branches.map(async (branch) => {
+        // Try to get pipeline from cache
+        const cachedPipeline = cache.getPipeline(projectPath, branch.name, includeJobs);
+        
+        // Group jobs by stage if available
+        const { stages, hasStages } = groupJobsByStage(cachedPipeline?.jobs || []);
+        
         // Each branch row will have its own htmx polling
-        return renderTemplate('branch-row', {
+        return renderTemplate(branchTemplateName, {
           projectPath,
           branchName: branch.name,
           safeId: generateSafeId(`${projectPath}-${branch.name}`),
           includeJobs,
+          lastRefresh: Date.now(),
+          pipeline: cachedPipeline ? {
+            ...cachedPipeline,
+            statusText: formatStatus(cachedPipeline.status),
+          } : undefined,
+          hasJobs: cachedPipeline?.jobs && cachedPipeline.jobs.length > 0,
+          stages,
+          hasStages,
           commitTitle: branch.commitTitle,
           commitShortId: branch.commitShortId,
-          // Pipeline will be fetched by the branch-row's own htmx request
         });
       })
     );
 
-    // Render project section
-    const projectInfo = cache.getGroupsProjects(serverName)?.find(p => p.path === projectPath);
+    // If rowsOnly, just return the branch rows HTML
+    if (rowsOnly) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(branchRowsHtml.join(''));
+    }
     
-    const html = renderTemplate('project-section', {
+    // Otherwise, render full project section
+    const projectInfo = cache.getGroupsProjects(serverName)?.find(p => p.path === projectPath);
+    const projectTemplateName = viewMode === 'chart' ? 'project-chart' : 'project-section';
+    
+    const html = renderTemplate(projectTemplateName, {
       serverName,
       projectPath,
       safeProjectId: generateSafeId(projectPath),
@@ -254,92 +325,162 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
  * GET /api/servers/:serverName
  * Returns: Full <section> with server and all projects
  * Auto-refreshes every 30 minutes via htmx
+ * Strategy: Always return cached data first, then trigger background refresh if needed
  */
 router.get('/servers/:serverName', async (req: Request, res: Response) => {
   const { serverName } = req.params;
   const includeJobs = req.query.includeJobs === 'true';
+  const forceRefresh = req.query.force === 'true';
+  const viewMode = req.query.view === 'chart' ? 'chart' : 'list';
   
-  logRequest('GET', `/api/servers/${serverName}`, { includeJobs });
+  logRequest('GET', `/api/servers/${serverName}`, { includeJobs, forceRefresh, viewMode });
 
   try {
     // Check L1 cache (30min TTL)
     let projects = cache.getGroupsProjects(serverName);
+    const hasCache = projects !== null;
     
-    if (!projects) {
-      logCache('1', serverName, false);
-      
-      // Fetch from GitLab
-      const server = config.servers.find(s => s.name === serverName);
-      if (!server) {
-        throw new Error(`Server not found: ${serverName}`);
-      }
-
-      const client = new GitLabClient(server.url, server.token);
-      const allProjectConfigs: any[] = [];
-
-      // Fetch configured projects
-      if (server.projects && server.projects.length > 0) {
-        allProjectConfigs.push(...server.projects);
-      }
-
-      // Fetch groups
-      if (server.groups && server.groups.length > 0) {
-        for (const groupConfig of server.groups) {
-          try {
-            const groupProjects = await client.getGroupProjects(groupConfig);
-            allProjectConfigs.push(...groupProjects.map(p => ({
-              id: p.id,
-              name: p.name,
-              path: p.path_with_namespace,
-            })));
-          } catch (error) {
-            logError(`Fetch group ${groupConfig.path || groupConfig.id}`, error as Error);
-          }
-        }
-      }
-
-      // Fetch project details and filter exclusions
-      projects = [];
-      for (const projectConfig of allProjectConfigs) {
-        try {
-          const project = await client.getProject(projectConfig);
-          
-          if (!isProjectExcluded(project.name, project.path_with_namespace)) {
-            projects.push({
-              id: project.id,
-              name: project.name,
-              path: project.path_with_namespace,
-              url: project.web_url,
-            });
-          }
-        } catch (error) {
-          logError(`Fetch project ${projectConfig.path || projectConfig.id}`, error as Error);
-        }
-      }
-
-      // Cache it
-      cache.setGroupsProjects(serverName, projects);
-    } else {
+    // If we have cache and not forcing refresh, return immediately
+    if (hasCache && !forceRefresh) {
       logCache('1', serverName, true);
+      
+      // Choose templates based on view mode
+      const projectTemplateName = viewMode === 'chart' ? 'project-chart' : 'project-section';
+      const serverTemplateName = viewMode === 'chart' ? 'server-chart' : 'server-section';
+      
+      // Render server section with cached data
+      const projectSectionsHtml = await Promise.all(
+        projects!.map(async (project) => {
+          return renderTemplate(projectTemplateName, {
+            serverName,
+            projectPath: project.path,
+            safeProjectId: generateSafeId(project.path),
+            name: project.name,
+            url: project.url,
+            branches: [],
+          });
+        })
+      );
+
+      const html = renderTemplate(serverTemplateName, {
+        serverName,
+        safeServerId: generateSafeId(serverName),
+        projects: projectSectionsHtml,
+      });
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    }
+    
+    // No cache or forced refresh - fetch from GitLab
+    logCache('1', serverName, false);
+    
+    const server = config.servers.find(s => s.name === serverName);
+    if (!server) {
+      throw new Error(`Server not found: ${serverName}`);
     }
 
-    // Render each project section (which will then auto-refresh independently)
+    const client = new GitLabClient(server.url, server.token);
+    const allProjectConfigs: any[] = [];
+
+    // Fetch configured projects
+    if (server.projects && server.projects.length > 0) {
+      allProjectConfigs.push(...server.projects);
+    }
+
+    // Fetch groups
+    if (server.groups && server.groups.length > 0) {
+      for (const groupConfig of server.groups) {
+        try {
+          const groupProjects = await client.getGroupProjects(groupConfig);
+          allProjectConfigs.push(...groupProjects.map(p => ({
+            id: p.id,
+            name: p.name,
+            path: p.path_with_namespace,
+          })));
+        } catch (error) {
+          logError(`Fetch group ${groupConfig.path || groupConfig.id}`, error as Error);
+        }
+      }
+    }
+
+    // Fetch project details and filter exclusions
+    projects = [];
+    for (const projectConfig of allProjectConfigs) {
+      try {
+        const project = await client.getProject(projectConfig);
+        
+        if (!isProjectExcluded(project.name, project.path_with_namespace)) {
+          projects.push({
+            id: project.id,
+            name: project.name,
+            path: project.path_with_namespace,
+            url: project.web_url,
+          });
+        }
+      } catch (error) {
+        logError(`Fetch project ${projectConfig.path || projectConfig.id}`, error as Error);
+      }
+    }
+
+    // Cache it
+    cache.setGroupsProjects(serverName, projects);
+
+    // Choose templates based on view mode
+    const branchTemplateName = viewMode === 'chart' ? 'branch-chart' : 'branch-row';
+    const projectTemplateName = viewMode === 'chart' ? 'project-chart' : 'project-section';
+    const serverTemplateName = viewMode === 'chart' ? 'server-chart' : 'server-section';
+    
+    // Render each project section with initial branch rows
     const projectSectionsHtml = await Promise.all(
       projects.map(async (project) => {
-        // Each project section will have its own htmx polling
-        return renderTemplate('project-section', {
+        // Get branches from L2 cache
+        let branches = cache.getBranches(project.path);
+        let branchRowsHtml: string[] = [];
+        
+        if (branches && branches.length > 0) {
+          // Render branch rows with cached pipelines if available
+          branchRowsHtml = await Promise.all(
+            branches.map(async (branch) => {
+              // Try to get pipeline from cache
+              const cachedPipeline = cache.getPipeline(project.path, branch.name, true);
+              
+              // Group jobs by stage if available
+              const { stages, hasStages } = groupJobsByStage(cachedPipeline?.jobs || []);
+              
+              return renderTemplate(branchTemplateName, {
+                projectPath: project.path,
+                branchName: branch.name,
+                safeId: generateSafeId(`${project.path}-${branch.name}`),
+                includeJobs: true,
+                lastRefresh: Date.now(),
+                pipeline: cachedPipeline ? {
+                  ...cachedPipeline,
+                  statusText: formatStatus(cachedPipeline.status),
+                } : undefined,
+                hasJobs: cachedPipeline?.jobs && cachedPipeline.jobs.length > 0,
+                stages,
+                hasStages,
+                commitTitle: branch.commitTitle,
+                commitShortId: branch.commitShortId,
+              });
+            })
+          );
+        }
+        
+        return renderTemplate(projectTemplateName, {
           serverName,
           projectPath: project.path,
           safeProjectId: generateSafeId(project.path),
           name: project.name,
           url: project.url,
-          branches: [], // Will be loaded by project-section's own htmx request
+          branches: branchRowsHtml,
         });
       })
     );
 
     // Render server section
-    const html = renderTemplate('server-section', {
+    const html = renderTemplate(serverTemplateName, {
       serverName,
       safeServerId: generateSafeId(serverName),
       projects: projectSectionsHtml,

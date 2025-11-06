@@ -1,10 +1,13 @@
 {{! Template for chart view - branch summary only (status + commit info) }}
 {{! Used by: GET /api/branches/:projectPath/:branchName?view=chart&summaryOnly=true }}
 <span id="summary-{{safeId}}" class="badges"
-      hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=false&view=chart&summaryOnly=true"
-      hx-trigger="every 10s [if !this.closest('details').open], refresh from:body"
-      hx-target="#summary-{{safeId}}"
-      hx-swap="outerHTML">
+  hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=false&view=chart&summaryOnly=true"
+  hx-trigger="every 10s, refresh from:body"
+  hx-disabled
+  hx-on:load="this.toggleAttribute('hx-disabled', this.closest('details') ? this.closest('details').open : false)"
+  hx-on:toggle from:closest="details"="this.toggleAttribute('hx-disabled', this.closest('details').open)"
+  hx-target="#summary-{{safeId}}"
+  hx-swap="outerHTML">
   {{#pipeline}}
     <mark data-status="{{status}}">{{statusText}}</mark>
     <span class="commit-info" title="{{../commitTitle}}">{{../commitShortId}}</span>

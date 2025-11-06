@@ -5,7 +5,8 @@
     hx-target="this"
     hx-swap="outerHTML"
     hx-indicator="#spinner-{{safeId}}"
-    data-branch-id="{{safeId}}">
+    data-branch-id="{{safeId}}"
+    data-last-refresh="{{lastRefresh}}">
   <td><code>{{branchName}}</code></td>
   {{#pipeline}}
     <td>
@@ -13,9 +14,48 @@
         <mark data-status="{{status}}">{{statusText}}</mark>
       </a>
       <span id="spinner-{{safeId}}" class="htmx-indicator">⏳</span>
+      {{#hasJobs}}
+        <details class="jobs-details">
+          <summary class="jobs-summary">Ver jobs ({{jobs.length}})</summary>
+          {{#hasStages}}
+            <div class="jobs-stages-inline">
+              {{#stages}}
+                <div class="stage-inline">
+                  <div class="stage-header-inline">{{name}}</div>
+                  <div class="stage-jobs-inline">
+                    {{#jobs}}
+                      <a href="{{web_url}}" 
+                         target="_blank" 
+                         class="job-item" 
+                         data-status="{{status}}"
+                         title="{{name}} - {{status}}">
+                        {{name}}
+                      </a>
+                    {{/jobs}}
+                  </div>
+                </div>
+              {{/stages}}
+            </div>
+          {{/hasStages}}
+          {{^hasStages}}
+            <div class="jobs-list-inline">
+              {{#jobs}}
+                <a href="{{web_url}}" 
+                   target="_blank" 
+                   class="job-item" 
+                   data-status="{{status}}"
+                   title="{{name}} - {{status}}">
+                  {{name}}
+                </a>
+              {{/jobs}}
+            </div>
+          {{/hasStages}}
+        </details>
+      {{/hasJobs}}
     </td>
     <td>
       <small title="{{../commitTitle}}">{{../commitShortId}}</small>
+      <small class="refresh-time" data-timestamp="{{lastRefresh}}"></small>
     </td>
   {{/pipeline}}
   {{^pipeline}}

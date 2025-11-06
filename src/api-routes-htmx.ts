@@ -106,6 +106,9 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
     const cacheResult = cache.getPipeline(projectPath, branchName, includeJobs);
     let pipeline = cacheResult.data;
     let isRefreshing = false;
+    // Try to get branch commit info from L2 cache (used for summary rendering when no pipeline)
+    const branchesCache = cache.getBranches(projectPath);
+    const branchMeta = branchesCache.data?.find(b => b.name === branchName);
     
     if (cacheResult.data === null || cacheResult.isStale) {
       logCache('3', `${projectPath}:${branchName}`, cacheResult.data !== null, cacheResult.isStale);
@@ -114,35 +117,44 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
       isRefreshing = cacheResult.isStale && cacheResult.data !== null;
       
       // Need to fetch from GitLab (either no data or stale data)
-      // First, find which server this project belongs to
-      const server = config.servers.find(s => 
-        s.projects?.some(p => p.path === projectPath) ||
-        s.groups?.some(g => true) // TODO: better group matching
-      );
+      // 1) Try to resolve project & server from L1 cache for reliability
+      let serverForProject: { name: string, url: string, token: string } | null = null;
+      let projectInfo: { id: number, name: string, path: string, url: string } | null = null;
 
-      if (!server) {
-        throw new Error(`Server not found for project: ${projectPath}`);
+      for (const srv of config.servers) {
+        const projectsRes = cache.getGroupsProjects(srv.name);
+        const p = projectsRes.data?.find(p => p.path === projectPath);
+        if (p) {
+          serverForProject = { name: srv.name, url: srv.url, token: srv.token };
+          projectInfo = { id: p.id, name: p.name, path: p.path, url: p.url };
+          break;
+        }
       }
 
-      const client = new GitLabClient(server.url, server.token);
-      
-      // Extract project ID from path (assuming format: group/project or user/project)
-      // This is a simplified approach; in production, we'd need project ID from L1/L2 cache
-      const projectParts = projectPath.split('/');
-      const projectName = projectParts[projectParts.length - 1];
-      
-      // Fetch pipeline from GitLab
-      const projects = await client.getGroupProjects({ path: projectParts[0] });
-      const project = projects.find(p => p.path_with_namespace === projectPath);
-      
-      if (!project) {
-        throw new Error(`Project not found: ${projectPath}`);
+      // 2) Fallback: fetch by group path if not in cache yet
+      if (!serverForProject) {
+        // Choose the first server (typical single-server setup) or the one with groups configured
+        const fallbackServer = config.servers[0];
+        if (!fallbackServer) {
+          throw new Error(`No servers configured`);
+        }
+        const client = new GitLabClient(fallbackServer.url, fallbackServer.token);
+        const projectParts = projectPath.split('/');
+        const groupPath = projectParts[0];
+        const projects = await client.getGroupProjects({ path: groupPath, includeSubgroups: true });
+        const found = projects.find(p => p.path_with_namespace === projectPath);
+        if (!found) {
+          throw new Error(`Project not found: ${projectPath}`);
+        }
+        serverForProject = { name: fallbackServer.name, url: fallbackServer.url, token: fallbackServer.token };
+        projectInfo = { id: found.id, name: found.name, path: found.path_with_namespace, url: found.web_url };
       }
 
-      const freshPipeline = await client.getLatestPipeline(project.id, branchName);
+      const client = new GitLabClient(serverForProject.url, serverForProject.token);
+      const freshPipeline = await client.getLatestPipeline(projectInfo!.id, branchName);
       
       if (includeJobs && freshPipeline) {
-        const jobs = await client.getPipelineJobs(project.id, freshPipeline.id);
+        const jobs = await client.getPipelineJobs(projectInfo!.id, freshPipeline.id);
         freshPipeline.jobs = jobs;
       }
 
@@ -188,8 +200,8 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
       hasJobs: pipeline?.jobs && pipeline.jobs.length > 0,
       stages,
       hasStages,
-      commitTitle: pipeline?.ref || '',
-      commitShortId: pipeline?.sha?.substring(0, 8) || '',
+      commitTitle: branchMeta?.commitTitle || pipeline?.ref || '',
+      commitShortId: branchMeta?.commitShortId || (pipeline?.sha ? pipeline.sha.substring(0,8) : ''),
     });
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -197,8 +209,12 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
   } catch (error) {
     logError(`/api/branches/${projectPath}/${branchName}`, error as Error);
     
-    // Render error state
-    const html = renderTemplate('branch-row', {
+    // Render error state with appropriate template
+    let errorTemplate = 'branch-row';
+    if (viewMode === 'chart') {
+      errorTemplate = summaryOnly ? 'branch-chart-summary' : (contentOnly ? 'branch-chart-content' : 'branch-chart');
+    }
+    const html = renderTemplate(errorTemplate, {
       projectPath,
       branchName,
       safeId: generateSafeId(`${projectPath}-${branchName}`),

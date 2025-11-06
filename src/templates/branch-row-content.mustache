@@ -1,0 +1,58 @@
+{{! Template for branch row content only (for innerHTML swap) }}
+{{! Used by: GET /api/branches/:projectPath/:branchName?contentOnly=true }}
+<td><code>{{branchName}}</code></td>
+{{#pipeline}}
+  <td>
+    <a href="{{web_url}}" target="_blank">
+      <mark data-status="{{status}}">{{statusText}}</mark>
+    </a>
+    <span id="spinner-{{safeId}}" class="htmx-indicator">⏳</span>
+    {{#hasJobs}}
+      <details class="jobs-details">
+        <summary class="jobs-summary">Ver jobs ({{jobs.length}})</summary>
+        {{#hasStages}}
+          <div class="jobs-stages-inline">
+            {{#stages}}
+              <div class="stage-inline">
+                <div class="stage-header-inline">{{name}}</div>
+                <div class="stage-jobs-inline">
+                  {{#jobs}}
+                    <a href="{{web_url}}" 
+                       target="_blank" 
+                       class="job-item" 
+                       data-status="{{status}}"
+                       title="{{name}} - {{status}}">
+                      {{name}}
+                    </a>
+                  {{/jobs}}
+                </div>
+              </div>
+            {{/stages}}
+          </div>
+        {{/hasStages}}
+        {{^hasStages}}
+          <div class="jobs-list-inline">
+            {{#jobs}}
+              <a href="{{web_url}}" 
+                 target="_blank" 
+                 class="job-item" 
+                 data-status="{{status}}"
+                 title="{{name}} - {{status}}">
+                {{name}}
+              </a>
+            {{/jobs}}
+          </div>
+        {{/hasStages}}
+      </details>
+    {{/hasJobs}}
+  </td>
+  <td title="Actualizado: {{lastRefresh}}">
+    <span class="refresh-time">hace {{refreshAgo}}</span>
+  </td>
+{{/pipeline}}
+{{^pipeline}}
+  <td colspan="2">
+    <mark data-status="none">No Pipeline</mark>
+    <span id="spinner-{{safeId}}" class="htmx-indicator">⏳</span>
+  </td>
+{{/pipeline}}

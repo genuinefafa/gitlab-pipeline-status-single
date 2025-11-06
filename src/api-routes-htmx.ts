@@ -163,6 +163,8 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
     let templateName = 'branch-row';
     if (viewMode === 'chart') {
       templateName = contentOnly ? 'branch-chart-content' : 'branch-chart';
+    } else if (viewMode === 'list') {
+      templateName = contentOnly ? 'branch-row-content' : 'branch-row';
     }
     
     // Render template

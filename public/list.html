@@ -52,22 +52,22 @@
       font-size: 0.85rem; 
       font-weight: 600; 
     }
-    mark[data-status="success"] { background: #16a34a; color: #fff; }
-    mark[data-status="success"]::before { content: "🟢 "; }
-    mark[data-status="failed"] { background: #dc2626; color: #fff; }
-    mark[data-status="failed"]::before { content: "🔴 "; }
-    mark[data-status="running"] { background: #2563eb; color: #fff; }
-    mark[data-status="running"]::before { content: "🔵 "; }
-    mark[data-status="pending"] { background: #facc15; color: #111827; }
-    mark[data-status="pending"]::before { content: "🟡 "; }
-    mark[data-status="canceled"] { background: #6b7280; color: #fff; }
-    mark[data-status="canceled"]::before { content: "⚫ "; }
-    mark[data-status="skipped"] { background: #9ca3af; color: #fff; }
-    mark[data-status="skipped"]::before { content: "⚪ "; }
-    mark[data-status="manual"] { background: #9333ea; color: #fff; }
-    mark[data-status="manual"]::before { content: "🟣 "; }
-    mark[data-status="none"] { background: #6b7280; color: #fff; }
-    mark[data-status="none"]::before { content: "⚪ "; }
+    mark[data-status="success"] { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+    mark[data-status="success"]::before { content: "✓ "; }
+    mark[data-status="failed"] { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    mark[data-status="failed"]::before { content: "✗ "; }
+    mark[data-status="running"] { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    mark[data-status="running"]::before { content: "▶ "; }
+    mark[data-status="pending"] { background: #fef3c7; color: #92400e; border: 1px solid #fde047; }
+    mark[data-status="pending"]::before { content: "⏸ "; }
+    mark[data-status="canceled"] { background: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
+    mark[data-status="canceled"]::before { content: "⊘ "; }
+    mark[data-status="skipped"] { background: #f3f4f6; color: #6b7280; border: 1px solid #e5e7eb; }
+    mark[data-status="skipped"]::before { content: "⤳ "; }
+    mark[data-status="manual"] { background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; }
+    mark[data-status="manual"]::before { content: "⚙ "; }
+    mark[data-status="none"] { background: #f3f4f6; color: #6b7280; border: 1px solid #e5e7eb; }
+    mark[data-status="none"]::before { content: "○ "; }
     
     /* Jobs container - clean grid layout */
     .jobs-container {

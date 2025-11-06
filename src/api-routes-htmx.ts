@@ -103,8 +103,15 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
 
   try {
     // Check L3 cache (5sec TTL)
-    const cacheResult = cache.getPipeline(projectPath, branchName, includeJobs);
+    let cacheResult = cache.getPipeline(projectPath, branchName, includeJobs);
     let pipeline = cacheResult.data;
+    // Fallback: if requesting without jobs and no cache, try with jobs to reuse stale status
+    if (!pipeline && includeJobs === false) {
+      const alt = cache.getPipeline(projectPath, branchName, true);
+      if (alt.data) {
+        pipeline = alt.data;
+      }
+    }
     let isRefreshing = false;
     // Try to get branch commit info from L2 cache (used for summary rendering when no pipeline)
     const branchesCache = cache.getBranches(projectPath);
@@ -493,8 +500,15 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
           branchRowsHtml = await Promise.all(
             branches.map(async (branch) => {
               // Try to get pipeline from cache
-              const pipelineResult = cache.getPipeline(project.path, branch.name, false);
-              const cachedPipeline = pipelineResult.data;
+              let pipelineResult = cache.getPipeline(project.path, branch.name, false);
+              let cachedPipeline = pipelineResult.data;
+              // Fallback to includeJobs=true cache to avoid "No Pipeline" on first load
+              if (!cachedPipeline) {
+                const alt = cache.getPipeline(project.path, branch.name, true);
+                if (alt.data) {
+                  cachedPipeline = alt.data;
+                }
+              }
               
               // Group jobs by stage if available
               const { stages, hasStages } = groupJobsByStage(cachedPipeline?.jobs || []);

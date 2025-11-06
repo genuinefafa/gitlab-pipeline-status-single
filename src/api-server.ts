@@ -8,9 +8,28 @@ import { loadConfig } from './config';
 import htmxRoutes from './api-routes-htmx';
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3000;
 const config = loadConfig();
 const cache = new CacheManager();
+
+// ============================================================================
+// STATIC FILES
+// ============================================================================
+app.use(express.static(join(__dirname, '../public')));
+
+// ============================================================================
+// HTML ROUTES - Default to chart view
+// ============================================================================
+
+// Main page - chart view
+app.get('/', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, '../public/chart.html'));
+});
+
+// About page
+app.get('/about', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, '../public/about.html'));
+});
 
 // ============================================================================
 // HTMX ROUTES - Multi-level cache with granular refresh

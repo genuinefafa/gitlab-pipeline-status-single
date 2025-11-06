@@ -1,0 +1,33 @@
+{{! Template for chart view - project section }}
+{{! Used by: GET /api/projects/:serverName/:projectPath/branches?view=chart }}
+<div class="project-card" id="project-chart-{{safeProjectId}}">
+  <div class="project-header">
+    <h3>
+      <a href="{{url}}" target="_blank">{{name}}</a>
+    </h3>
+    <span id="spinner-chart-{{safeProjectId}}" class="htmx-indicator">⏳</span>
+  </div>
+  
+  {{#error}}
+    <div style="padding: 1rem;">
+      <p><em>Error: {{.}}</em></p>
+    </div>
+  {{/error}}
+  {{^error}}
+    <div id="branches-chart-{{safeProjectId}}">
+      {{#branches}}
+        {{{.}}}
+      {{/branches}}
+      {{^branches}}
+     <div style="padding: 1rem;" 
+       hx-get="/api/projects/{{serverName}}/{{projectPath}}/branches?includeJobs=false&view=chart&rowsOnly=true"
+             hx-trigger="load"
+             hx-target="#branches-chart-{{safeProjectId}}"
+             hx-swap="innerHTML"
+             hx-indicator="#spinner-chart-{{safeProjectId}}">
+          <em>⏳ Cargando branches...</em>
+        </div>
+      {{/branches}}
+    </div>
+  {{/error}}
+</div>

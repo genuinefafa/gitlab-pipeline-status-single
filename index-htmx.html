@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GitLab Pipeline Monitor</title>
   
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  
   <!-- Sakura.css - Classless CSS framework -->
   <link rel="stylesheet" href="https://unpkg.com/sakura.css/css/sakura.css" type="text/css">
   
@@ -60,6 +63,109 @@
     mark[data-status="manual"]::before { content: "🟣 "; }
     mark[data-status="none"] { background: #6b7280; color: #fff; }
     mark[data-status="none"]::before { content: "⚪ "; }
+    
+    /* Jobs container - clean grid layout */
+    .jobs-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 0.4rem;
+      margin-top: 0.6rem;
+      padding: 0.5rem;
+      background: #f9fafb;
+      border-radius: 4px;
+      border: 1px solid #e5e7eb;
+    }
+    
+    /* Individual job badges */
+    .job-badge {
+      display: flex;
+      align-items: center;
+      padding: 0.35rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      border: 1px solid transparent;
+      position: relative;
+    }
+    
+    .job-badge:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .job-badge .job-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    
+    /* Job status colors */
+    .job-badge[data-status="success"] { 
+      background: #dcfce7; 
+      color: #166534; 
+      border-color: #86efac;
+    }
+    .job-badge[data-status="success"]::before { content: "✓ "; font-weight: bold; }
+    
+    .job-badge[data-status="failed"] { 
+      background: #fee2e2; 
+      color: #991b1b; 
+      border-color: #fca5a5;
+    }
+    .job-badge[data-status="failed"]::before { content: "✗ "; font-weight: bold; }
+    
+    .job-badge[data-status="running"] { 
+      background: #dbeafe; 
+      color: #1e40af; 
+      border-color: #93c5fd;
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    .job-badge[data-status="running"]::before { content: "▶ "; }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    
+    .job-badge[data-status="pending"] { 
+      background: #fef3c7; 
+      color: #92400e; 
+      border-color: #fde047;
+    }
+    .job-badge[data-status="pending"]::before { content: "⏸ "; }
+    
+    .job-badge[data-status="canceled"] { 
+      background: #f3f4f6; 
+      color: #4b5563; 
+      border-color: #d1d5db;
+    }
+    .job-badge[data-status="canceled"]::before { content: "⊘ "; }
+    
+    .job-badge[data-status="skipped"] { 
+      background: #f3f4f6; 
+      color: #6b7280; 
+      border-color: #e5e7eb;
+    }
+    .job-badge[data-status="skipped"]::before { content: "⤳ "; }
+    
+    .job-badge[data-status="manual"] { 
+      background: #f3e8ff; 
+      color: #6b21a8; 
+      border-color: #d8b4fe;
+    }
+    .job-badge[data-status="manual"]::before { content: "⚙ "; }
+    
+    /* Refresh time indicator */
+    .refresh-time {
+      display: block;
+      color: #9ca3af;
+      font-size: 0.7rem;
+      margin-top: 0.2rem;
+      font-style: italic;
+    }
     
     /* Project cards with status-based border */
     article { 
@@ -151,7 +257,81 @@
       opacity: 0.7;
       transition: opacity 200ms ease-in;
     }
+    
+    /* Navigation */
+    nav {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding: 1rem 0;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    
+    nav a {
+      padding: 0.5rem 1rem;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+    
+    nav a.active {
+      background: #2563eb;
+      color: white;
+    }
+    
+    nav a:not(.active):hover {
+      background: #f3f4f6;
+    }
+    
+    nav .divider {
+      flex: 1;
+    }
+    
+    nav button {
+      margin: 0;
+    }
   </style>
+  
+  <script>
+    // Update relative timestamps every 10 seconds
+    function updateRelativeTimes() {
+      document.querySelectorAll('.refresh-time[data-timestamp]').forEach(el => {
+        const timestamp = parseInt(el.dataset.timestamp);
+        if (!timestamp) return;
+        
+        const seconds = Math.floor((Date.now() - timestamp) / 1000);
+        let text = '';
+        
+        if (seconds < 10) {
+          text = 'recién';
+        } else if (seconds < 60) {
+          text = `hace ${seconds}s`;
+        } else if (seconds < 3600) {
+          const minutes = Math.floor(seconds / 60);
+          text = `hace ${minutes}min`;
+        } else {
+          const hours = Math.floor(seconds / 3600);
+          text = `hace ${hours}h`;
+        }
+        
+        el.textContent = text;
+      });
+    }
+    
+    // Initial update and set interval
+    setInterval(updateRelativeTimes, 10000);
+    
+    // Update on htmx afterSwap events
+    document.body.addEventListener('htmx:afterSwap', () => {
+      updateRelativeTimes();
+    });
+    
+    // Initial update on load
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(updateRelativeTimes, 100);
+    });
+  </script>
 </head>
 <body>
   <header>
@@ -162,24 +342,37 @@
   </header>
 
   <nav>
-    <button _="on click 
-                set #content's innerHTML to '<div class=loading><p>⏳ Loading...</p></div>'
-                then fetch /api/servers/Starhopper 
-                then put the result into #content">
-      📋 Refresh
+    <a href="/" class="">🏠 Inicio</a>
+    <a href="/list" class="active">📋 Lista</a>
+    <a href="/chart" class="">📊 Gráfico</a>
+    <div class="divider"></div>
+    <button id="refresh-btn"
+            hx-get="/api/servers/Starhopper?force=true"
+            hx-target="#content"
+            hx-swap="innerHTML"
+            hx-indicator="#refresh-spinner">
+      � Refresh
     </button>
+    <span id="refresh-spinner" class="htmx-indicator">⏳</span>
   </nav>
 
   <main id="content">
-    <!-- Initial loading placeholder - will be replaced by htmx on load -->
+    <!-- Initial loading - uses cached data first -->
     <div 
       class="loading"
       hx-get="/api/servers/Starhopper"
       hx-trigger="load"
       hx-swap="outerHTML">
-      <p>⏳ Loading GitLab data...</p>
+      <p>⏳ Cargando datos de GitLab...</p>
     </div>
   </main>
+  
+  <!-- Hidden trigger for background refresh after initial load -->
+  <div style="display: none;"
+       hx-get="/api/servers/Starhopper?force=true"
+       hx-trigger="load delay:500ms"
+       hx-target="#content"
+       hx-swap="innerHTML"></div>
 
   <footer style="text-align: center; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 0.85rem;">
     <p>

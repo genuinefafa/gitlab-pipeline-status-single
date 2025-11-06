@@ -24,6 +24,12 @@ interface CacheEntry<T> {
   duration?: number; // Fetch duration in ms
 }
 
+interface CacheResult<T> {
+  data: T | null;
+  isStale: boolean;
+  age?: number;
+}
+
 interface GroupsProjectsCache {
   [serverName: string]: {
     timestamp: number;
@@ -75,28 +81,31 @@ export class MultiLevelCacheManager {
   // LEVEL 1: Groups & Projects (30min TTL)
   // ============================================================================
 
-  getGroupsProjects(serverName: string): Array<{id: number, name: string, path: string, url: string}> | null {
+  getGroupsProjects(serverName: string): CacheResult<Array<{id: number, name: string, path: string, url: string}>> {
     try {
       if (!fs.existsSync(this.groupsProjectsFile)) {
-        return null;
+        return { data: null, isStale: false };
       }
 
       const cache: GroupsProjectsCache = JSON.parse(fs.readFileSync(this.groupsProjectsFile, 'utf-8'));
       const entry = cache[serverName];
 
       if (!entry) {
-        return null;
+        return { data: null, isStale: false };
       }
 
       const age = Date.now() - entry.timestamp;
-      if (age > CACHE_TTL.GROUPS_PROJECTS) {
-        return null;
-      }
+      const isStale = age > CACHE_TTL.GROUPS_PROJECTS;
 
-      return entry.projects;
+      // Always return data even if stale - never leave client with nothing
+      return { 
+        data: entry.projects, 
+        isStale,
+        age 
+      };
     } catch (error) {
       console.error('Error reading groups/projects cache:', error);
-      return null;
+      return { data: null, isStale: false };
     }
   }
 
@@ -123,28 +132,31 @@ export class MultiLevelCacheManager {
   // LEVEL 2: Branches per project (5min TTL)
   // ============================================================================
 
-  getBranches(projectPath: string): Array<{name: string, commitTitle?: string, commitShortId?: string}> | null {
+  getBranches(projectPath: string): CacheResult<Array<{name: string, commitTitle?: string, commitShortId?: string}>> {
     try {
       if (!fs.existsSync(this.branchesFile)) {
-        return null;
+        return { data: null, isStale: false };
       }
 
       const cache: BranchesCache = JSON.parse(fs.readFileSync(this.branchesFile, 'utf-8'));
       const entry = cache[projectPath];
 
       if (!entry) {
-        return null;
+        return { data: null, isStale: false };
       }
 
       const age = Date.now() - entry.timestamp;
-      if (age > CACHE_TTL.BRANCHES) {
-        return null;
-      }
+      const isStale = age > CACHE_TTL.BRANCHES;
 
-      return entry.branches;
+      // Always return data even if stale - never leave client with nothing
+      return { 
+        data: entry.branches, 
+        isStale,
+        age 
+      };
     } catch (error) {
       console.error('Error reading branches cache:', error);
-      return null;
+      return { data: null, isStale: false };
     }
   }
 
@@ -171,10 +183,10 @@ export class MultiLevelCacheManager {
   // LEVEL 3: Pipeline status per branch (5sec TTL)
   // ============================================================================
 
-  getPipeline(projectPath: string, branchName: string, includeJobs: boolean): any | null {
+  getPipeline(projectPath: string, branchName: string, includeJobs: boolean): CacheResult<any> {
     try {
       if (!fs.existsSync(this.pipelinesFile)) {
-        return null;
+        return { data: null, isStale: false };
       }
 
       const cache: PipelinesCache = JSON.parse(fs.readFileSync(this.pipelinesFile, 'utf-8'));
@@ -182,18 +194,21 @@ export class MultiLevelCacheManager {
       const entry = cache[key];
 
       if (!entry || entry.includeJobs !== includeJobs) {
-        return null;
+        return { data: null, isStale: false };
       }
 
       const age = Date.now() - entry.timestamp;
-      if (age > CACHE_TTL.PIPELINES) {
-        return null;
-      }
+      const isStale = age > CACHE_TTL.PIPELINES;
 
-      return entry.pipeline || null;
+      // Always return data even if stale - never leave client with nothing
+      return { 
+        data: entry.pipeline || null, 
+        isStale,
+        age 
+      };
     } catch (error) {
       console.error('Error reading pipeline cache:', error);
-      return null;
+      return { data: null, isStale: false };
     }
   }
 

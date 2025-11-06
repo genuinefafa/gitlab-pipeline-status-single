@@ -1,0 +1,11 @@
+{{! Template for chart view - server section }}
+{{! Used by: GET /api/servers/:serverName?view=chart }}
+<div>
+  <h2>{{serverName}}</h2>
+  {{#projects}}
+    {{{.}}}
+  {{/projects}}
+  {{^projects}}
+    <p><em>(no projects)</em></p>
+  {{/projects}}
+</div>

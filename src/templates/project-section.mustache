@@ -19,12 +19,18 @@
           <th>Commit</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="branches-{{safeProjectId}}">
         {{#branches}}
           {{{.}}}
         {{/branches}}
         {{^branches}}
-          <tr><td colspan="3"><em>(no branches)</em></td></tr>
+          <tr hx-get="/api/projects/{{serverName}}/{{projectPath}}/branches?includeJobs=true&rowsOnly=true"
+              hx-trigger="load"
+              hx-target="#branches-{{safeProjectId}}"
+              hx-swap="innerHTML"
+              hx-indicator="#spinner-project-{{safeProjectId}}">
+            <td colspan="3"><em>⏳ Cargando branches...</em></td>
+          </tr>
         {{/branches}}
       </tbody>
     </table>

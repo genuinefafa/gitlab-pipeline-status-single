@@ -10,7 +10,7 @@ const config = loadConfig();
 const cache = new MultiLevelCacheManager();
 
 // ============================================================================
-// LOGGING UTILITIES
+// UTILITY FUNCTIONS
 // ============================================================================
 
 function logRequest(method: string, path: string, params?: any) {
@@ -18,8 +18,40 @@ function logRequest(method: string, path: string, params?: any) {
   console.log(`[${timestamp}] 📨 ${method} ${path}`, params ? JSON.stringify(params) : '');
 }
 
-function logCache(level: string, key: string, hit: boolean) {
-  const emoji = hit ? '💾 HIT' : '❌ MISS';
+/**
+ * Group jobs by stage, preserving the order in which stages first appear
+ * NOTE: GitLab returns jobs in reverse stage order, so we reverse the final array
+ */
+function groupJobsByStage(jobs: any[]): { stages: any[]; hasStages: boolean } {
+  if (!jobs || jobs.length === 0) {
+    return { stages: [], hasStages: false };
+  }
+  
+  // Group by stage preserving first occurrence order
+  const stageOrder: string[] = [];
+  const stageMap = new Map<string, any[]>();
+  
+  jobs.forEach((job: any) => {
+    const stageName = job.stage || 'default';
+    if (!stageMap.has(stageName)) {
+      stageMap.set(stageName, []);
+      stageOrder.push(stageName); // Track order of first occurrence
+    }
+    stageMap.get(stageName)!.push(job);
+  });
+  
+  // Create stages array in the order they first appeared, then reverse
+  // because GitLab API returns jobs in reverse chronological order
+  const stages = stageOrder.map(stageName => ({
+    name: stageName,
+    jobs: stageMap.get(stageName)!
+  })).reverse();
+  
+  return { stages, hasStages: stages.length > 0 };
+}
+
+function logCache(level: string, key: string, hit: boolean, isStale: boolean = false) {
+  const emoji = hit ? (isStale ? '🔄 STALE' : '💾 HIT') : '❌ MISS';
   console.log(`${emoji} L${level} cache: ${key}`);
 }
 
@@ -63,67 +95,120 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
   const branchName = pathParts.pop() || '';
   const projectPath = pathParts.join('/');
   const includeJobs = req.query.includeJobs === 'true';
+  const viewMode = req.query.view === 'chart' ? 'chart' : 'list';
+  const contentOnly = req.query.contentOnly === 'true';
+  const summaryOnly = req.query.summaryOnly === 'true';
   
-  logRequest('GET', `/api/branches/${projectPath}/${branchName}`, { includeJobs });
+  logRequest('GET', `/api/branches/${projectPath}/${branchName}`, { includeJobs, viewMode, contentOnly });
 
   try {
     // Check L3 cache (5sec TTL)
-    let pipeline = cache.getPipeline(projectPath, branchName, includeJobs);
+    let cacheResult = cache.getPipeline(projectPath, branchName, includeJobs);
+    let pipeline = cacheResult.data;
+    // Fallback: if requesting without jobs and no cache, try with jobs to reuse stale status
+    if (!pipeline && includeJobs === false) {
+      const alt = cache.getPipeline(projectPath, branchName, true);
+      if (alt.data) {
+        pipeline = alt.data;
+      }
+    }
+    let isRefreshing = false;
+    // Try to get branch commit info from L2 cache (used for summary rendering when no pipeline)
+    const branchesCache = cache.getBranches(projectPath);
+    const branchMeta = branchesCache.data?.find(b => b.name === branchName);
     
-    if (pipeline === null) {
-      logCache('3', `${projectPath}:${branchName}`, false);
+    if (cacheResult.data === null || cacheResult.isStale) {
+      logCache('3', `${projectPath}:${branchName}`, cacheResult.data !== null, cacheResult.isStale);
       
-      // Need to fetch from GitLab
-      // First, find which server this project belongs to
-      const server = config.servers.find(s => 
-        s.projects?.some(p => p.path === projectPath) ||
-        s.groups?.some(g => true) // TODO: better group matching
-      );
+      // Mark as refreshing if we have stale data
+      isRefreshing = cacheResult.isStale && cacheResult.data !== null;
+      
+      // Need to fetch from GitLab (either no data or stale data)
+      // 1) Try to resolve project & server from L1 cache for reliability
+      let serverForProject: { name: string, url: string, token: string } | null = null;
+      let projectInfo: { id: number, name: string, path: string, url: string } | null = null;
 
-      if (!server) {
-        throw new Error(`Server not found for project: ${projectPath}`);
+      for (const srv of config.servers) {
+        const projectsRes = cache.getGroupsProjects(srv.name);
+        const p = projectsRes.data?.find(p => p.path === projectPath);
+        if (p) {
+          serverForProject = { name: srv.name, url: srv.url, token: srv.token };
+          projectInfo = { id: p.id, name: p.name, path: p.path, url: p.url };
+          break;
+        }
       }
 
-      const client = new GitLabClient(server.url, server.token);
-      
-      // Extract project ID from path (assuming format: group/project or user/project)
-      // This is a simplified approach; in production, we'd need project ID from L1/L2 cache
-      const projectParts = projectPath.split('/');
-      const projectName = projectParts[projectParts.length - 1];
-      
-      // Fetch pipeline from GitLab
-      const projects = await client.getGroupProjects({ path: projectParts[0] });
-      const project = projects.find(p => p.path_with_namespace === projectPath);
-      
-      if (!project) {
-        throw new Error(`Project not found: ${projectPath}`);
+      // 2) Fallback: fetch by group path if not in cache yet
+      if (!serverForProject) {
+        // Choose the first server (typical single-server setup) or the one with groups configured
+        const fallbackServer = config.servers[0];
+        if (!fallbackServer) {
+          throw new Error(`No servers configured`);
+        }
+        const client = new GitLabClient(fallbackServer.url, fallbackServer.token);
+        const projectParts = projectPath.split('/');
+        const groupPath = projectParts[0];
+        const projects = await client.getGroupProjects({ path: groupPath, includeSubgroups: true });
+        const found = projects.find(p => p.path_with_namespace === projectPath);
+        if (!found) {
+          throw new Error(`Project not found: ${projectPath}`);
+        }
+        serverForProject = { name: fallbackServer.name, url: fallbackServer.url, token: fallbackServer.token };
+        projectInfo = { id: found.id, name: found.name, path: found.path_with_namespace, url: found.web_url };
       }
 
-      pipeline = await client.getLatestPipeline(project.id, branchName);
+      const client = new GitLabClient(serverForProject.url, serverForProject.token);
+      const freshPipeline = await client.getLatestPipeline(projectInfo!.id, branchName);
       
-      if (includeJobs && pipeline) {
-        const jobs = await client.getPipelineJobs(project.id, pipeline.id);
-        pipeline.jobs = jobs;
+      if (includeJobs && freshPipeline) {
+        const jobs = await client.getPipelineJobs(projectInfo!.id, freshPipeline.id);
+        freshPipeline.jobs = jobs;
       }
 
-      // Cache it
-      cache.setPipeline(projectPath, branchName, pipeline, includeJobs);
+      // Cache the fresh data
+      cache.setPipeline(projectPath, branchName, freshPipeline, includeJobs);
+      
+      // Use fresh data if we didn't have stale data to show
+      if (!isRefreshing) {
+        pipeline = freshPipeline;
+      }
     } else {
-      logCache('3', `${projectPath}:${branchName}`, true);
+      logCache('3', `${projectPath}:${branchName}`, true, false);
     }
 
+    // Group jobs by stage if available
+    const { stages, hasStages } = groupJobsByStage(pipeline?.jobs || []);
+    
+    // Choose template based on view mode and contentOnly flag
+    let templateName = 'branch-row';
+    if (viewMode === 'chart') {
+      if (contentOnly) {
+        templateName = 'branch-chart-content';
+      } else if (summaryOnly) {
+        templateName = 'branch-chart-summary';
+      } else {
+        templateName = 'branch-chart';
+      }
+    } else if (viewMode === 'list') {
+      templateName = contentOnly ? 'branch-row-content' : 'branch-row';
+    }
+    
     // Render template
-    const html = renderTemplate('branch-row', {
+    const html = renderTemplate(templateName, {
       projectPath,
       branchName,
       safeId: generateSafeId(`${projectPath}-${branchName}`),
       includeJobs,
+      lastRefresh: Date.now(),
       pipeline: pipeline ? {
         ...pipeline,
         statusText: formatStatus(pipeline.status),
       } : undefined,
-      commitTitle: pipeline?.ref || '',
-      commitShortId: pipeline?.sha?.substring(0, 8) || '',
+      hasJobs: pipeline?.jobs && pipeline.jobs.length > 0,
+      stages,
+      hasStages,
+      commitTitle: branchMeta?.commitTitle || pipeline?.ref || '',
+      commitShortId: branchMeta?.commitShortId || (pipeline?.sha ? pipeline.sha.substring(0,8) : ''),
     });
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -131,12 +216,17 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
   } catch (error) {
     logError(`/api/branches/${projectPath}/${branchName}`, error as Error);
     
-    // Render error state
-    const html = renderTemplate('branch-row', {
+    // Render error state with appropriate template
+    let errorTemplate = 'branch-row';
+    if (viewMode === 'chart') {
+      errorTemplate = summaryOnly ? 'branch-chart-summary' : (contentOnly ? 'branch-chart-content' : 'branch-chart');
+    }
+    const html = renderTemplate(errorTemplate, {
       projectPath,
       branchName,
       safeId: generateSafeId(`${projectPath}-${branchName}`),
       includeJobs,
+      lastRefresh: Date.now(),
       error: (error as Error).message,
     });
     
@@ -160,15 +250,18 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
   const serverName = req.params[0] || '';
   const projectPath = req.params[1] || '';
   const includeJobs = req.query.includeJobs === 'true';
+  const rowsOnly = req.query.rowsOnly === 'true';
+  const viewMode = req.query.view === 'chart' ? 'chart' : 'list';
   
-  logRequest('GET', `/api/projects/${serverName}/${projectPath}/branches`, { includeJobs });
+  logRequest('GET', `/api/projects/${serverName}/${projectPath}/branches`, { includeJobs, rowsOnly, viewMode });
 
   try {
     // Check L2 cache (5min TTL)
-    let branches = cache.getBranches(projectPath);
+    const branchesResult = cache.getBranches(projectPath);
+    let branches = branchesResult.data;
     
-    if (!branches) {
-      logCache('2', projectPath, false);
+    if (!branches || branchesResult.isStale) {
+      logCache('2', projectPath, branches !== null, branchesResult.isStale);
       
       // Fetch from GitLab
       const server = config.servers.find(s => s.name === serverName);
@@ -179,8 +272,8 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
       const client = new GitLabClient(server.url, server.token);
       
       // Get project details from L1 cache or fetch
-      const cachedProjects = cache.getGroupsProjects(serverName);
-      const projectInfo = cachedProjects?.find(p => p.path === projectPath);
+      const projectsResult = cache.getGroupsProjects(serverName);
+      const projectInfo = projectsResult.data?.find(p => p.path === projectPath);
       
       if (!projectInfo) {
         throw new Error(`Project not found in cache: ${projectPath}`);
@@ -189,38 +282,69 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
       // Fetch branches from GitLab
       const gitlabBranches = await client.getBranches(projectInfo.id);
       
-      branches = gitlabBranches.map(b => ({
+      const freshBranches = gitlabBranches.map(b => ({
         name: b.name,
         commitTitle: b.commit.title,
         commitShortId: b.commit.short_id,
       }));
 
       // Cache it
-      cache.setBranches(projectPath, branches);
+      cache.setBranches(projectPath, freshBranches);
+      
+      // Use fresh data if we don't have stale to show
+      if (!branchesResult.isStale || !branches) {
+        branches = freshBranches;
+      }
     } else {
-      logCache('2', projectPath, true);
+      logCache('2', projectPath, true, false);
     }
 
-    // Render each branch row (which will then auto-refresh independently)
+    // Choose template based on view mode
+    const branchTemplateName = viewMode === 'chart' ? 'branch-chart' : 'branch-row';
+    
+    // Render each branch row/item (which will then auto-refresh independently)
     const branchRowsHtml = await Promise.all(
       branches.map(async (branch) => {
+        // Try to get pipeline from cache
+        const pipelineResult = cache.getPipeline(projectPath, branch.name, includeJobs);
+        const cachedPipeline = pipelineResult.data;
+        
+        // Group jobs by stage if available
+        const { stages, hasStages } = groupJobsByStage(cachedPipeline?.jobs || []);
+        
         // Each branch row will have its own htmx polling
-        return renderTemplate('branch-row', {
+        return renderTemplate(branchTemplateName, {
           projectPath,
           branchName: branch.name,
           safeId: generateSafeId(`${projectPath}-${branch.name}`),
           includeJobs,
+          lastRefresh: Date.now(),
+          isRefreshing: pipelineResult.isStale,
+          pipeline: cachedPipeline ? {
+            ...cachedPipeline,
+            statusText: formatStatus(cachedPipeline.status),
+          } : undefined,
+          hasJobs: cachedPipeline?.jobs && cachedPipeline.jobs.length > 0,
+          stages,
+          hasStages,
           commitTitle: branch.commitTitle,
           commitShortId: branch.commitShortId,
-          // Pipeline will be fetched by the branch-row's own htmx request
         });
       })
     );
 
-    // Render project section
-    const projectInfo = cache.getGroupsProjects(serverName)?.find(p => p.path === projectPath);
+    // If rowsOnly, just return the branch rows HTML
+    if (rowsOnly) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(branchRowsHtml.join(''));
+    }
     
-    const html = renderTemplate('project-section', {
+    // Otherwise, render full project section
+    const projectsResult = cache.getGroupsProjects(serverName);
+    const projectInfo = projectsResult.data?.find(p => p.path === projectPath);
+    const projectTemplateName = viewMode === 'chart' ? 'project-chart' : 'project-section';
+    
+    const html = renderTemplate(projectTemplateName, {
       serverName,
       projectPath,
       safeProjectId: generateSafeId(projectPath),
@@ -254,92 +378,175 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
  * GET /api/servers/:serverName
  * Returns: Full <section> with server and all projects
  * Auto-refreshes every 30 minutes via htmx
+ * Strategy: Always return cached data first, then trigger background refresh if needed
  */
 router.get('/servers/:serverName', async (req: Request, res: Response) => {
   const { serverName } = req.params;
   const includeJobs = req.query.includeJobs === 'true';
+  const forceRefresh = req.query.force === 'true';
+  const viewMode = req.query.view === 'chart' ? 'chart' : 'list';
   
-  logRequest('GET', `/api/servers/${serverName}`, { includeJobs });
+  logRequest('GET', `/api/servers/${serverName}`, { includeJobs, forceRefresh, viewMode });
 
   try {
     // Check L1 cache (30min TTL)
-    let projects = cache.getGroupsProjects(serverName);
+    const projectsResult = cache.getGroupsProjects(serverName);
+    let projects = projectsResult.data;
+    const hasCache = projects !== null;
     
-    if (!projects) {
-      logCache('1', serverName, false);
+    // If we have cache and not forcing refresh, return immediately with stale data if needed
+    if (hasCache && !forceRefresh) {
+      logCache('1', serverName, true, projectsResult.isStale);
       
-      // Fetch from GitLab
-      const server = config.servers.find(s => s.name === serverName);
-      if (!server) {
-        throw new Error(`Server not found: ${serverName}`);
-      }
+      // Choose templates based on view mode
+      const projectTemplateName = viewMode === 'chart' ? 'project-chart' : 'project-section';
+      const serverTemplateName = viewMode === 'chart' ? 'server-chart' : 'server-section';
+      
+      // Render server section with cached data
+      const projectSectionsHtml = await Promise.all(
+        projects!.map(async (project) => {
+          return renderTemplate(projectTemplateName, {
+            serverName,
+            projectPath: project.path,
+            safeProjectId: generateSafeId(project.path),
+            name: project.name,
+            url: project.url,
+            branches: [],
+            isRefreshing: projectsResult.isStale,
+          });
+        })
+      );
 
-      const client = new GitLabClient(server.url, server.token);
-      const allProjectConfigs: any[] = [];
+      const html = renderTemplate(serverTemplateName, {
+        serverName,
+        safeServerId: generateSafeId(serverName),
+        projects: projectSectionsHtml,
+        isRefreshing: projectsResult.isStale,
+      });
 
-      // Fetch configured projects
-      if (server.projects && server.projects.length > 0) {
-        allProjectConfigs.push(...server.projects);
-      }
-
-      // Fetch groups
-      if (server.groups && server.groups.length > 0) {
-        for (const groupConfig of server.groups) {
-          try {
-            const groupProjects = await client.getGroupProjects(groupConfig);
-            allProjectConfigs.push(...groupProjects.map(p => ({
-              id: p.id,
-              name: p.name,
-              path: p.path_with_namespace,
-            })));
-          } catch (error) {
-            logError(`Fetch group ${groupConfig.path || groupConfig.id}`, error as Error);
-          }
-        }
-      }
-
-      // Fetch project details and filter exclusions
-      projects = [];
-      for (const projectConfig of allProjectConfigs) {
-        try {
-          const project = await client.getProject(projectConfig);
-          
-          if (!isProjectExcluded(project.name, project.path_with_namespace)) {
-            projects.push({
-              id: project.id,
-              name: project.name,
-              path: project.path_with_namespace,
-              url: project.web_url,
-            });
-          }
-        } catch (error) {
-          logError(`Fetch project ${projectConfig.path || projectConfig.id}`, error as Error);
-        }
-      }
-
-      // Cache it
-      cache.setGroupsProjects(serverName, projects);
-    } else {
-      logCache('1', serverName, true);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    }
+    
+    // No cache or forced refresh - fetch from GitLab
+    logCache('1', serverName, false, false);
+    
+    const server = config.servers.find(s => s.name === serverName);
+    if (!server) {
+      throw new Error(`Server not found: ${serverName}`);
     }
 
-    // Render each project section (which will then auto-refresh independently)
+    const client = new GitLabClient(server.url, server.token);
+    const allProjectConfigs: any[] = [];
+
+    // Fetch configured projects
+    if (server.projects && server.projects.length > 0) {
+      allProjectConfigs.push(...server.projects);
+    }
+
+    // Fetch groups
+    if (server.groups && server.groups.length > 0) {
+      for (const groupConfig of server.groups) {
+        try {
+          const groupProjects = await client.getGroupProjects(groupConfig);
+          allProjectConfigs.push(...groupProjects.map(p => ({
+            id: p.id,
+            name: p.name,
+            path: p.path_with_namespace,
+          })));
+        } catch (error) {
+          logError(`Fetch group ${groupConfig.path || groupConfig.id}`, error as Error);
+        }
+      }
+    }
+
+    // Fetch project details and filter exclusions
+    projects = [];
+    for (const projectConfig of allProjectConfigs) {
+      try {
+        const project = await client.getProject(projectConfig);
+        
+        if (!isProjectExcluded(project.name, project.path_with_namespace)) {
+          projects.push({
+            id: project.id,
+            name: project.name,
+            path: project.path_with_namespace,
+            url: project.web_url,
+          });
+        }
+      } catch (error) {
+        logError(`Fetch project ${projectConfig.path || projectConfig.id}`, error as Error);
+      }
+    }
+
+    // Cache it
+    cache.setGroupsProjects(serverName, projects);
+
+    // Choose templates based on view mode
+    const branchTemplateName = viewMode === 'chart' ? 'branch-chart' : 'branch-row';
+    const projectTemplateName = viewMode === 'chart' ? 'project-chart' : 'project-section';
+    const serverTemplateName = viewMode === 'chart' ? 'server-chart' : 'server-section';
+    
+    // Render each project section with initial branch rows
     const projectSectionsHtml = await Promise.all(
       projects.map(async (project) => {
-        // Each project section will have its own htmx polling
-        return renderTemplate('project-section', {
+        // Get branches from L2 cache
+        const branchesResult = cache.getBranches(project.path);
+        const branches = branchesResult.data;
+        let branchRowsHtml: string[] = [];
+        
+        if (branches && branches.length > 0) {
+          // Render branch rows with cached pipelines if available
+          branchRowsHtml = await Promise.all(
+            branches.map(async (branch) => {
+              // Try to get pipeline from cache
+              let pipelineResult = cache.getPipeline(project.path, branch.name, false);
+              let cachedPipeline = pipelineResult.data;
+              // Fallback to includeJobs=true cache to avoid "No Pipeline" on first load
+              if (!cachedPipeline) {
+                const alt = cache.getPipeline(project.path, branch.name, true);
+                if (alt.data) {
+                  cachedPipeline = alt.data;
+                }
+              }
+              
+              // Group jobs by stage if available
+              const { stages, hasStages } = groupJobsByStage(cachedPipeline?.jobs || []);
+              
+              return renderTemplate(branchTemplateName, {
+                projectPath: project.path,
+                branchName: branch.name,
+                safeId: generateSafeId(`${project.path}-${branch.name}`),
+                includeJobs: false,
+                lastRefresh: Date.now(),
+                isRefreshing: pipelineResult.isStale,
+                pipeline: cachedPipeline ? {
+                  ...cachedPipeline,
+                  statusText: formatStatus(cachedPipeline.status),
+                } : undefined,
+                hasJobs: cachedPipeline?.jobs && cachedPipeline.jobs.length > 0,
+                stages,
+                hasStages,
+                commitTitle: branch.commitTitle,
+                commitShortId: branch.commitShortId,
+              });
+            })
+          );
+        }
+        
+        return renderTemplate(projectTemplateName, {
           serverName,
           projectPath: project.path,
           safeProjectId: generateSafeId(project.path),
           name: project.name,
           url: project.url,
-          branches: [], // Will be loaded by project-section's own htmx request
+          branches: branchRowsHtml,
         });
       })
     );
 
     // Render server section
-    const html = renderTemplate('server-section', {
+    const html = renderTemplate(serverTemplateName, {
       serverName,
       safeServerId: generateSafeId(serverName),
       projects: projectSectionsHtml,

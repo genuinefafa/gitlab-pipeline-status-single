@@ -1,0 +1,95 @@
+{{! Template for chart view - branch with pipeline stages }}
+{{! Used by: GET /api/branches/:projectPath/:branchName?view=chart }}
+<details data-branch-id="{{safeId}}"
+         hx-on:toggle="(function(){
+           var d=document.querySelector('details[data-branch-id=\'{{safeId}}\']');
+           var s=document.getElementById('summary-{{safeId}}');
+           var c=document.getElementById('content-{{safeId}}');
+           var isOpen = !!d && d.open;
+           if(s){ s.toggleAttribute('hx-disabled', isOpen); }
+           if(c){
+             c.toggleAttribute('hx-disabled', !isOpen);
+             if(isOpen){ setTimeout(function(){ htmx.trigger(c,'refresh-now'); }, 0); }
+           }
+         })()">
+  <summary>
+    <code>{{branchName}}</code>
+    <span id="summary-{{safeId}}"
+      class="badges"
+      hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=false&view=chart&summaryOnly=true"
+      hx-trigger="every 10s, refresh from:body"
+      hx-on:toggle from:closest="details"="this.toggleAttribute('hx-disabled', this.closest('details').open)"
+      hx-target="#summary-{{safeId}}"
+      hx-swap="outerHTML">
+      {{#pipeline}}
+        <mark data-status="{{status}}">{{statusText}}</mark>
+        <span class="commit-info" title="{{../commitTitle}}">{{../commitShortId}}</span>
+        <span id="spinner-{{safeId}}" class="htmx-indicator">⏳</span>
+      {{/pipeline}}
+      {{^pipeline}}
+        <mark data-status="none">No Pipeline</mark>
+        <span id="spinner-{{safeId}}" class="htmx-indicator">⏳</span>
+      {{/pipeline}}
+    </span>
+  </summary>
+  
+  <div id="content-{{safeId}}"
+    hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs=true&view=chart&contentOnly=true"
+    hx-trigger="refresh-now"
+    hx-disabled
+    hx-on:refresh from:body="if (this.closest('details') && this.closest('details').open) { htmx.trigger(this,'refresh-now') }"
+    hx-swap="innerHTML"
+    hx-indicator="#spinner-{{safeId}}">
+    {{#pipeline}}
+      {{#hasJobs}}
+        {{#hasStages}}
+          <div class="pipeline-stages">
+            <div class="stages-container">
+              {{#stages}}
+                <div class="stage">
+                  <div class="stage-header">{{name}}</div>
+                  <div class="stage-jobs">
+                    {{#jobs}}
+                      <a href="{{web_url}}" 
+                         target="_blank" 
+                         class="job-item" 
+                         data-status="{{status}}"
+                         title="{{name}} - {{status}}">
+                        {{name}}
+                      </a>
+                    {{/jobs}}
+                  </div>
+                </div>
+              {{/stages}}
+            </div>
+          </div>
+        {{/hasStages}}
+        {{^hasStages}}
+          <div class="jobs-list">
+            {{#jobs}}
+              <a href="{{web_url}}" 
+                 target="_blank" 
+                 class="job-item" 
+                 data-status="{{status}}"
+                 title="{{name}} - {{status}}">
+                {{name}}
+              </a>
+            {{/jobs}}
+          </div>
+        {{/hasStages}}
+      {{/hasJobs}}
+      {{^hasJobs}}
+        <div class="pipeline-stages">
+          <p><em>Pipeline sin jobs</em></p>
+        </div>
+      {{/hasJobs}}
+    {{/pipeline}}
+    {{^pipeline}}
+      {{#error}}
+        <div class="pipeline-stages">
+          <p><em>Error: {{.}}</em></p>
+        </div>
+      {{/error}}
+    {{/pipeline}}
+  </div>
+</details>

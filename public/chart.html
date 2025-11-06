@@ -323,6 +323,23 @@
   </footer>
 
   <script>
+    // Update relative timestamps for elements with .refresh-time[data-timestamp]
+    function updateRelativeTimes() {
+      document.querySelectorAll('.refresh-time[data-timestamp]').forEach(function(el){
+        var ts = parseInt(el.getAttribute('data-timestamp'));
+        if (!ts) return;
+        var seconds = Math.floor((Date.now() - ts) / 1000);
+        var text = '';
+        if (seconds < 10) text = 'recién';
+        else if (seconds < 60) text = 'hace ' + seconds + 's';
+        else if (seconds < 3600) text = 'hace ' + Math.floor(seconds/60) + 'min';
+        else text = 'hace ' + Math.floor(seconds/3600) + 'h';
+        el.textContent = text;
+      });
+    }
+    setInterval(updateRelativeTimes, 10000);
+    document.addEventListener('DOMContentLoaded', function(){ setTimeout(updateRelativeTimes, 100); });
+    document.body.addEventListener('htmx:afterSwap', function(){ setTimeout(updateRelativeTimes, 50); });
     // SSE-driven refresh: request server refresh, then notify UI to update selectively
     (function(){
       const btn = document.getElementById('refresh-btn');

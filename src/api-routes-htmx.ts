@@ -48,8 +48,8 @@ function groupJobsByStage(jobs: any[]): { stages: any[]; hasStages: boolean } {
   return { stages, hasStages: stages.length > 0 };
 }
 
-function logCache(level: string, key: string, hit: boolean) {
-  const emoji = hit ? '💾 HIT' : '❌ MISS';
+function logCache(level: string, key: string, hit: boolean, isStale: boolean = false) {
+  const emoji = hit ? (isStale ? '🔄 STALE' : '💾 HIT') : '❌ MISS';
   console.log(`${emoji} L${level} cache: ${key}`);
 }
 
@@ -100,12 +100,17 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
 
   try {
     // Check L3 cache (5sec TTL)
-    let pipeline = cache.getPipeline(projectPath, branchName, includeJobs);
+    const cacheResult = cache.getPipeline(projectPath, branchName, includeJobs);
+    let pipeline = cacheResult.data;
+    let isRefreshing = false;
     
-    if (pipeline === null) {
-      logCache('3', `${projectPath}:${branchName}`, false);
+    if (cacheResult.data === null || cacheResult.isStale) {
+      logCache('3', `${projectPath}:${branchName}`, cacheResult.data !== null, cacheResult.isStale);
       
-      // Need to fetch from GitLab
+      // Mark as refreshing if we have stale data
+      isRefreshing = cacheResult.isStale && cacheResult.data !== null;
+      
+      // Need to fetch from GitLab (either no data or stale data)
       // First, find which server this project belongs to
       const server = config.servers.find(s => 
         s.projects?.some(p => p.path === projectPath) ||
@@ -131,17 +136,22 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
         throw new Error(`Project not found: ${projectPath}`);
       }
 
-      pipeline = await client.getLatestPipeline(project.id, branchName);
+      const freshPipeline = await client.getLatestPipeline(project.id, branchName);
       
-      if (includeJobs && pipeline) {
-        const jobs = await client.getPipelineJobs(project.id, pipeline.id);
-        pipeline.jobs = jobs;
+      if (includeJobs && freshPipeline) {
+        const jobs = await client.getPipelineJobs(project.id, freshPipeline.id);
+        freshPipeline.jobs = jobs;
       }
 
-      // Cache it
-      cache.setPipeline(projectPath, branchName, pipeline, includeJobs);
+      // Cache the fresh data
+      cache.setPipeline(projectPath, branchName, freshPipeline, includeJobs);
+      
+      // Use fresh data if we didn't have stale data to show
+      if (!isRefreshing) {
+        pipeline = freshPipeline;
+      }
     } else {
-      logCache('3', `${projectPath}:${branchName}`, true);
+      logCache('3', `${projectPath}:${branchName}`, true, false);
     }
 
     // Group jobs by stage if available
@@ -213,10 +223,11 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
 
   try {
     // Check L2 cache (5min TTL)
-    let branches = cache.getBranches(projectPath);
+    const branchesResult = cache.getBranches(projectPath);
+    let branches = branchesResult.data;
     
-    if (!branches) {
-      logCache('2', projectPath, false);
+    if (!branches || branchesResult.isStale) {
+      logCache('2', projectPath, branches !== null, branchesResult.isStale);
       
       // Fetch from GitLab
       const server = config.servers.find(s => s.name === serverName);
@@ -227,8 +238,8 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
       const client = new GitLabClient(server.url, server.token);
       
       // Get project details from L1 cache or fetch
-      const cachedProjects = cache.getGroupsProjects(serverName);
-      const projectInfo = cachedProjects?.find(p => p.path === projectPath);
+      const projectsResult = cache.getGroupsProjects(serverName);
+      const projectInfo = projectsResult.data?.find(p => p.path === projectPath);
       
       if (!projectInfo) {
         throw new Error(`Project not found in cache: ${projectPath}`);
@@ -237,16 +248,21 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
       // Fetch branches from GitLab
       const gitlabBranches = await client.getBranches(projectInfo.id);
       
-      branches = gitlabBranches.map(b => ({
+      const freshBranches = gitlabBranches.map(b => ({
         name: b.name,
         commitTitle: b.commit.title,
         commitShortId: b.commit.short_id,
       }));
 
       // Cache it
-      cache.setBranches(projectPath, branches);
+      cache.setBranches(projectPath, freshBranches);
+      
+      // Use fresh data if we don't have stale to show
+      if (!branchesResult.isStale || !branches) {
+        branches = freshBranches;
+      }
     } else {
-      logCache('2', projectPath, true);
+      logCache('2', projectPath, true, false);
     }
 
     // Choose template based on view mode
@@ -256,7 +272,8 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
     const branchRowsHtml = await Promise.all(
       branches.map(async (branch) => {
         // Try to get pipeline from cache
-        const cachedPipeline = cache.getPipeline(projectPath, branch.name, includeJobs);
+        const pipelineResult = cache.getPipeline(projectPath, branch.name, includeJobs);
+        const cachedPipeline = pipelineResult.data;
         
         // Group jobs by stage if available
         const { stages, hasStages } = groupJobsByStage(cachedPipeline?.jobs || []);
@@ -268,6 +285,7 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
           safeId: generateSafeId(`${projectPath}-${branch.name}`),
           includeJobs,
           lastRefresh: Date.now(),
+          isRefreshing: pipelineResult.isStale,
           pipeline: cachedPipeline ? {
             ...cachedPipeline,
             statusText: formatStatus(cachedPipeline.status),
@@ -288,7 +306,8 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
     }
     
     // Otherwise, render full project section
-    const projectInfo = cache.getGroupsProjects(serverName)?.find(p => p.path === projectPath);
+    const projectsResult = cache.getGroupsProjects(serverName);
+    const projectInfo = projectsResult.data?.find(p => p.path === projectPath);
     const projectTemplateName = viewMode === 'chart' ? 'project-chart' : 'project-section';
     
     const html = renderTemplate(projectTemplateName, {
@@ -337,12 +356,13 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
 
   try {
     // Check L1 cache (30min TTL)
-    let projects = cache.getGroupsProjects(serverName);
+    const projectsResult = cache.getGroupsProjects(serverName);
+    let projects = projectsResult.data;
     const hasCache = projects !== null;
     
-    // If we have cache and not forcing refresh, return immediately
+    // If we have cache and not forcing refresh, return immediately with stale data if needed
     if (hasCache && !forceRefresh) {
-      logCache('1', serverName, true);
+      logCache('1', serverName, true, projectsResult.isStale);
       
       // Choose templates based on view mode
       const projectTemplateName = viewMode === 'chart' ? 'project-chart' : 'project-section';
@@ -358,6 +378,7 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
             name: project.name,
             url: project.url,
             branches: [],
+            isRefreshing: projectsResult.isStale,
           });
         })
       );
@@ -366,6 +387,7 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
         serverName,
         safeServerId: generateSafeId(serverName),
         projects: projectSectionsHtml,
+        isRefreshing: projectsResult.isStale,
       });
 
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -373,7 +395,7 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
     }
     
     // No cache or forced refresh - fetch from GitLab
-    logCache('1', serverName, false);
+    logCache('1', serverName, false, false);
     
     const server = config.servers.find(s => s.name === serverName);
     if (!server) {
@@ -435,7 +457,8 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
     const projectSectionsHtml = await Promise.all(
       projects.map(async (project) => {
         // Get branches from L2 cache
-        let branches = cache.getBranches(project.path);
+        const branchesResult = cache.getBranches(project.path);
+        const branches = branchesResult.data;
         let branchRowsHtml: string[] = [];
         
         if (branches && branches.length > 0) {
@@ -443,7 +466,8 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
           branchRowsHtml = await Promise.all(
             branches.map(async (branch) => {
               // Try to get pipeline from cache
-              const cachedPipeline = cache.getPipeline(project.path, branch.name, true);
+              const pipelineResult = cache.getPipeline(project.path, branch.name, true);
+              const cachedPipeline = pipelineResult.data;
               
               // Group jobs by stage if available
               const { stages, hasStages } = groupJobsByStage(cachedPipeline?.jobs || []);
@@ -454,6 +478,7 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
                 safeId: generateSafeId(`${project.path}-${branch.name}`),
                 includeJobs: true,
                 lastRefresh: Date.now(),
+                isRefreshing: pipelineResult.isStale,
                 pipeline: cachedPipeline ? {
                   ...cachedPipeline,
                   statusText: formatStatus(cachedPipeline.status),

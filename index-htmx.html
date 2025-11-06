@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitLab Pipeline Monitor</title>
+  
+  <!-- Sakura.css - Classless CSS framework -->
+  <link rel="stylesheet" href="https://unpkg.com/sakura.css/css/sakura.css" type="text/css">
+  
+  <!-- htmx -->
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  
+  <!-- hyperscript -->
+  <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+  
+  <style>
+    /* Minimal custom styles */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* htmx loading indicator */
+    .htmx-indicator {
+      display: none;
+      font-size: 1.2rem;
+    }
+    
+    .htmx-request .htmx-indicator,
+    .htmx-request.htmx-indicator {
+      display: inline;
+    }
+    
+    .loading { 
+      text-align: center; 
+      padding: 2rem;
+      color: #6b7280;
+    }
+    
+    /* Status badges */
+    mark[data-status] { 
+      padding: 0.25rem 0.5rem; 
+      border-radius: 3px; 
+      font-size: 0.85rem; 
+      font-weight: 600; 
+    }
+    mark[data-status="success"] { background: #16a34a; color: #fff; }
+    mark[data-status="success"]::before { content: "🟢 "; }
+    mark[data-status="failed"] { background: #dc2626; color: #fff; }
+    mark[data-status="failed"]::before { content: "🔴 "; }
+    mark[data-status="running"] { background: #2563eb; color: #fff; }
+    mark[data-status="running"]::before { content: "🔵 "; }
+    mark[data-status="pending"] { background: #facc15; color: #111827; }
+    mark[data-status="pending"]::before { content: "🟡 "; }
+    mark[data-status="canceled"] { background: #6b7280; color: #fff; }
+    mark[data-status="canceled"]::before { content: "⚫ "; }
+    mark[data-status="skipped"] { background: #9ca3af; color: #fff; }
+    mark[data-status="skipped"]::before { content: "⚪ "; }
+    mark[data-status="manual"] { background: #9333ea; color: #fff; }
+    mark[data-status="manual"]::before { content: "🟣 "; }
+    mark[data-status="none"] { background: #6b7280; color: #fff; }
+    mark[data-status="none"]::before { content: "⚪ "; }
+    
+    /* Project cards with status-based border */
+    article { 
+      border-left: 4px solid #ddd; 
+      margin: 1rem 0; 
+      padding: 0.5rem 1rem;
+      position: relative;
+    }
+    article[data-status="success"] { border-left-color: #16a34a; }
+    article[data-status="failed"] { border-left-color: #dc2626; }
+    article[data-status="running"] { border-left-color: #2563eb; }
+    article[data-status="pending"] { border-left-color: #facc15; }
+    
+    /* Branch table styling */
+    table {
+      width: 100%;
+      margin-top: 1rem;
+      border-collapse: collapse;
+    }
+    
+    th {
+      text-align: left;
+      padding: 0.5rem;
+      background: #f3f4f6;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    
+    td {
+      padding: 0.5rem;
+      border-bottom: 1px solid #e5e7eb;
+      vertical-align: middle;
+    }
+    
+    tr:last-child td {
+      border-bottom: none;
+    }
+    
+    /* Server sections */
+    section {
+      margin: 2rem 0;
+    }
+    
+    section > h2 {
+      border-bottom: 2px solid #3498db;
+      padding-bottom: 0.5rem;
+      color: #2c3e50;
+    }
+    
+    /* Project header */
+    article > h3 {
+      margin-top: 0;
+      margin-bottom: 0.5rem;
+    }
+    
+    article > h3 > a {
+      text-decoration: none;
+      color: #2563eb;
+    }
+    
+    article > h3 > a:hover {
+      text-decoration: underline;
+    }
+    
+    /* Commit info styling */
+    .commit-info {
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+    
+    code {
+      background: #f3f4f6;
+      padding: 0.15rem 0.35rem;
+      border-radius: 3px;
+      font-size: 0.9rem;
+    }
+    
+    /* Error state */
+    .error {
+      color: #dc2626;
+      background: #fee2e2;
+      padding: 1rem;
+      border-radius: 4px;
+      margin: 1rem 0;
+    }
+    
+    /* Subtle loading state for partial updates */
+    .htmx-swapping {
+      opacity: 0.7;
+      transition: opacity 200ms ease-in;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🚀 GitLab Pipeline Monitor</h1>
+    <p>
+      <small id="cache-info">Multi-level cache: L1 (30min) → L2 (5min) → L3 (5s)</small>
+    </p>
+  </header>
+
+  <nav>
+    <button _="on click 
+                set #content's innerHTML to '<div class=loading><p>⏳ Loading...</p></div>'
+                then fetch /api/servers/Starhopper 
+                then put the result into #content">
+      📋 Refresh
+    </button>
+  </nav>
+
+  <main id="content">
+    <!-- Initial loading placeholder - will be replaced by htmx on load -->
+    <div 
+      class="loading"
+      hx-get="/api/servers/Starhopper"
+      hx-trigger="load"
+      hx-swap="outerHTML">
+      <p>⏳ Loading GitLab data...</p>
+    </div>
+  </main>
+
+  <footer style="text-align: center; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 0.85rem;">
+    <p>
+      Multi-level cache: L1 (30min) → L2 (5min) → L3 (5s) | 
+      Powered by htmx + Mustache templates
+    </p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,36 @@
+{{! Template for a single branch row with pipeline status }}
+{{! Used by: GET /api/branches/:projectPath/:branchName }}
+<tr hx-get="/api/branches/{{projectPath}}/{{branchName}}?includeJobs={{includeJobs}}" 
+    hx-trigger="every 5s"
+    hx-target="this"
+    hx-swap="outerHTML"
+    hx-indicator="#spinner-{{safeId}}"
+    data-branch-id="{{safeId}}">
+  <td><code>{{branchName}}</code></td>
+  {{#pipeline}}
+    <td>
+      <a href="{{web_url}}" target="_blank">
+        <mark data-status="{{status}}">{{statusText}}</mark>
+      </a>
+      <span id="spinner-{{safeId}}" class="htmx-indicator">⏳</span>
+    </td>
+    <td>
+      <small title="{{../commitTitle}}">{{../commitShortId}}</small>
+    </td>
+  {{/pipeline}}
+  {{^pipeline}}
+    {{#error}}
+      <td colspan="2">
+        <em>{{.}}</em>
+        <span id="spinner-{{safeId}}" class="htmx-indicator">⏳</span>
+      </td>
+    {{/error}}
+    {{^error}}
+      <td>
+        <mark data-status="none">No Pipeline</mark>
+        <span id="spinner-{{safeId}}" class="htmx-indicator">⏳</span>
+      </td>
+      <td></td>
+    {{/error}}
+  {{/pipeline}}
+</tr>

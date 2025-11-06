@@ -1,0 +1,32 @@
+{{! Template for a single project section with all branches }}
+{{! Used by: GET /api/projects/:serverName/:projectPath/branches }}
+<article id="project-{{safeProjectId}}"
+         data-server="{{serverName}}"
+         data-project="{{projectPath}}">
+  <h3>
+    <a href="{{url}}" target="_blank">{{name}}</a>
+    <span id="spinner-project-{{safeProjectId}}" class="htmx-indicator">⏳</span>
+  </h3>
+  {{#error}}
+    <p><em>Error: {{.}}</em></p>
+  {{/error}}
+  {{^error}}
+    <table>
+      <thead>
+        <tr>
+          <th>Branch</th>
+          <th>Pipeline</th>
+          <th>Commit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#branches}}
+          {{{.}}}
+        {{/branches}}
+        {{^branches}}
+          <tr><td colspan="3"><em>(no branches)</em></td></tr>
+        {{/branches}}
+      </tbody>
+    </table>
+  {{/error}}
+</article>

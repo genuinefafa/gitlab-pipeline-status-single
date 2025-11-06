@@ -18,22 +18,17 @@ const cache = new CacheManager();
 app.use(express.static(join(__dirname, '../public')));
 
 // ============================================================================
-// HTML ROUTES - Clean URLs for different views
+// HTML ROUTES - Default to chart view
 // ============================================================================
 
-// Home page
+// Main page - chart view
 app.get('/', (_req: Request, res: Response) => {
-  res.sendFile(join(__dirname, '../public/index.html'));
-});
-
-// List view
-app.get('/list', (_req: Request, res: Response) => {
-  res.sendFile(join(__dirname, '../public/list.html'));
-});
-
-// Chart view
-app.get('/chart', (_req: Request, res: Response) => {
   res.sendFile(join(__dirname, '../public/chart.html'));
+});
+
+// About page
+app.get('/about', (_req: Request, res: Response) => {
+  res.sendFile(join(__dirname, '../public/about.html'));
 });
 
 // ============================================================================

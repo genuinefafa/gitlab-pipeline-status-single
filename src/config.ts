@@ -52,6 +52,12 @@ export function loadConfig(configPath: string = 'config.yaml'): Config {
     config.display.pipelinesPerBranch = config.display.pipelinesPerBranch || 1;
     config.display.compact = config.display.compact ?? false;
 
+    // Set cache TTL defaults (in seconds)
+    config.cache = config.cache || {};
+    config.cache.groupsProjects = config.cache.groupsProjects ?? 1800; // 30 minutes
+    config.cache.branches = config.cache.branches ?? 300;              // 5 minutes
+    config.cache.pipelines = config.cache.pipelines ?? 5;              // 5 seconds
+
     return config;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {

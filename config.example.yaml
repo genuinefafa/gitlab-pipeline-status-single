@@ -75,6 +75,21 @@ servers:
 # - Recommended: Configure 2 tokens with overlapping validity periods
 # - The UI will show warnings for expiring/expired tokens
 
+# Cache TTL (Time To Live) configuration in seconds
+# Adjust these values based on your needs:
+# - Lower values: More frequent updates, higher API usage
+# - Higher values: Less frequent updates, lower API usage
+cache:
+  # Groups/Projects cache TTL (default: 1800s = 30 minutes)
+  # Project structure changes rarely, so a longer TTL is recommended
+  groupsProjects: 1800
+  # Branches cache TTL (default: 300s = 5 minutes)
+  # Branches are created/deleted occasionally
+  branches: 300
+  # Pipeline status cache TTL (default: 5s)
+  # Pipeline status changes frequently, so a short TTL keeps data fresh
+  pipelines: 5
+
 # Display options
 display:
   # Show only branches with recent activity (default: false)

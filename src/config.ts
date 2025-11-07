@@ -13,8 +13,25 @@ export function loadConfig(configPath: string = 'config.yaml'): Config {
     }
 
     for (const server of config.servers) {
-      if (!server.url || !server.token) {
-        throw new Error(`Server "${server.name}" missing url or token`);
+      if (!server.url) {
+        throw new Error(`Server "${server.name}" missing url`);
+      }
+
+      // Validate tokens: support legacy single token or new tokens array
+      const hasLegacyToken = !!server.token;
+      const hasNewTokens = server.tokens && server.tokens.length > 0;
+
+      if (!hasLegacyToken && !hasNewTokens) {
+        throw new Error(`Server "${server.name}" missing token or tokens array`);
+      }
+
+      // If using new tokens array, validate each token
+      if (hasNewTokens) {
+        for (const token of server.tokens!) {
+          if (!token.value) {
+            throw new Error(`Server "${server.name}" has token without value`);
+          }
+        }
       }
 
       const hasProjects = server.projects && server.projects.length > 0;

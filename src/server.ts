@@ -42,7 +42,11 @@ async function fetchPipelineData(includeJobs: boolean = false): Promise<TreeData
   const allData: TreeData[] = [];
 
   for (const server of config.servers) {
-    const client = new GitLabClient(server.url, server.token);
+    const resolvedToken = server.token ?? (server.tokens && server.tokens.length > 0 ? server.tokens[0].value : undefined);
+    if (!resolvedToken) {
+      throw new Error(`No token configured for server ${server.name}`);
+    }
+    const client = new GitLabClient(server.url, resolvedToken);
     const projects: ProjectTreeNode[] = [];
 
     const allProjectConfigs = [];
@@ -220,8 +224,11 @@ app.get('/api/pipelines/stream', async (req: Request, res: Response) => {
 
     for (const server of config.servers) {
       send('progress', { message: `Connecting to ${server.name}...`, stage: 'init' });
-
-      const client = new GitLabClient(server.url, server.token);
+      const resolvedToken = server.token ?? (server.tokens && server.tokens.length > 0 ? server.tokens[0].value : undefined);
+      if (!resolvedToken) {
+        throw new Error(`No token configured for server ${server.name}`);
+      }
+      const client = new GitLabClient(server.url, resolvedToken);
       const projects: ProjectTreeNode[] = [];
       const allProjectConfigs: ProjectConfig[] = [];
 

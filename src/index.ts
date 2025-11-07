@@ -71,7 +71,12 @@ class GitLabMonitor {
       const allData: TreeData[] = [];
 
       for (const server of this.config.servers) {
-        const client = new GitLabClient(server.url, server.token);
+        // Resolve token (supports legacy single token and new multi-token array)
+        const resolvedToken = server.token ?? (server.tokens && server.tokens.length > 0 ? server.tokens[0].value : undefined);
+        if (!resolvedToken) {
+          throw new Error(`No token configured for server ${server.name}`);
+        }
+        const client = new GitLabClient(server.url, resolvedToken);
         const projects: ProjectTreeNode[] = [];
 
         // Collect all project configs from both individual projects and groups

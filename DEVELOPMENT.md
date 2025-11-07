@@ -3,10 +3,48 @@
 ## Git Workflow
 
 ### Branch Strategy
-- `main` - Production-ready code
+- `main` - Production-ready code (**protected: no direct commits**)
 - `feature/*` - New features and enhancements
 - `fix/*` - Bug fixes
 - `chore/*` - Maintenance tasks (dependencies, tooling, docs)
+
+### Pull Request Policy
+
+**All changes to `main` MUST go through Pull Requests.**
+
+#### Rules
+1. **Never commit directly to `main`** - Always work in a feature/fix/chore branch
+2. **Create PR before merging** - Even for small fixes or urgent changes
+3. **Wait for review/approval** - PRs provide visibility and tracking
+4. **Use descriptive PR titles** - Follow conventional commit format
+5. **Document changes in PR body** - Explain what, why, and how to test
+
+#### PR Workflow
+```bash
+# 1. Create feature branch from main
+git checkout main
+git pull origin main
+git checkout -b feature/my-feature
+
+# 2. Make atomic commits
+git add file.ts
+git commit -m "feat: add feature X"
+
+# 3. Push branch
+git push -u origin feature/my-feature
+
+# 4. Open PR on GitHub (targeting main)
+# 5. Wait for approval and CI checks
+# 6. Merge PR (squash or merge commit as appropriate)
+# 7. Delete feature branch after merge
+```
+
+#### Why PRs are Mandatory
+- **Visibility** - Team sees what's changing before it hits main
+- **Review** - Catch issues before production
+- **Documentation** - PRs serve as changelog for each change
+- **CI/CD** - Automated checks run before merge
+- **Accountability** - Clear ownership and approval trail
 
 ### Commit Standards
 

@@ -5,7 +5,7 @@ import { CacheManager } from './cache';
 import { GitLabClient } from './gitlab';
 import { TreeData, ProjectTreeNode, ProjectConfig } from './types';
 import { loadConfig } from './config';
-import htmxRoutes from './api-routes-htmx';
+import htmxRoutes, { tokenManager } from './api-routes-htmx';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -59,6 +59,32 @@ function logError(context: string, error: Error) {
 }
 
 /**
+ * Get a valid token for a server
+ */
+function getServerToken(serverName: string): string {
+  const server = config.servers.find(s => s.name === serverName);
+  if (!server) {
+    throw new Error(`Server ${serverName} not found in configuration`);
+  }
+
+  // Try validated token from TokenManager first
+  const validatedToken = tokenManager.getValidToken(serverName);
+  if (validatedToken) {
+    return validatedToken;
+  }
+
+  // Fallback to config
+  if (server.token) {
+    return server.token;
+  }
+  if (server.tokens && server.tokens.length > 0) {
+    return server.tokens[0].value;
+  }
+
+  throw new Error(`No valid tokens configured for server ${serverName}`);
+}
+
+/**
  * Check if project should be excluded based on config
  */
 function isProjectExcluded(projectName: string, projectPath: string): boolean {
@@ -83,7 +109,7 @@ async function fetchPipelineData(includeJobs: boolean = false): Promise<TreeData
 
   for (const server of config.servers) {
     logGitLab('Connecting', `${server.name} (${server.url})`);
-    const client = new GitLabClient(server.url, server.token);
+    const client = new GitLabClient(server.url, getServerToken(server.name));
     const projects: ProjectTreeNode[] = [];
     const allProjectConfigs: ProjectConfig[] = [];
 
@@ -274,7 +300,7 @@ app.get('/api/pipelines/stream', async (req: Request, res: Response) => {
     for (const server of config.servers) {
       send('progress', { message: `Connecting to ${server.name}...`, stage: 'init' });
 
-      const client = new GitLabClient(server.url, server.token);
+      const client = new GitLabClient(server.url, getServerToken(server.name));
       const projects: ProjectTreeNode[] = [];
       const allProjectConfigs: ProjectConfig[] = [];
 
@@ -392,7 +418,19 @@ app.get('/api/pipelines/stream', async (req: Request, res: Response) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`\n🚀 API Server running on http://localhost:${PORT}`);
-  console.log(`📡 Monitoring ${config.servers.length} GitLab server(s)\n`);
+  console.log(`📡 Monitoring ${config.servers.length} GitLab server(s)`);
+  
+  // Validate tokens on startup
+  console.log(`\n🔐 Validating GitLab tokens...`);
+  for (const server of config.servers) {
+    await tokenManager.validateServerTokens(server);
+  }
+  
+  if (tokenManager.hasWarnings()) {
+    console.warn(`\n⚠️  WARNING: Some tokens are expiring or invalid. Check token status for details.\n`);
+  } else {
+    console.log(`✅ All tokens are valid\n`);
+  }
 });

@@ -1,12 +1,14 @@
 import axios, { AxiosInstance } from 'axios';
-import { Project, Branch, Pipeline, ProjectConfig, GroupConfig } from './types';
+import { Project, Branch, Pipeline, ProjectConfig, GroupConfig, TokenInfo } from './types';
 
 export class GitLabClient {
   private client: AxiosInstance;
   private baseURL: string;
+  private currentToken: string;
 
   constructor(baseURL: string, token: string) {
     this.baseURL = baseURL;
+    this.currentToken = token;
     this.client = axios.create({
       baseURL: `${baseURL}/api/v4`,
       headers: {
@@ -35,6 +37,31 @@ export class GitLabClient {
         return Promise.reject(error);
       }
     );
+  }
+
+  /**
+   * Update the token used by this client
+   */
+  setToken(token: string): void {
+    this.currentToken = token;
+    this.client.defaults.headers['PRIVATE-TOKEN'] = token;
+  }
+
+  /**
+   * Get current token information from GitLab
+   */
+  async getTokenInfo(): Promise<TokenInfo> {
+    try {
+      const response = await this.client.get<TokenInfo>('/personal_access_tokens/self');
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(
+          `Failed to fetch token info: ${error.response?.status} ${error.response?.statusText}`
+        );
+      }
+      throw error;
+    }
   }
 
   async getProject(config: ProjectConfig): Promise<Project> {

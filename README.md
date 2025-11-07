@@ -24,6 +24,7 @@ A GitLab pipeline status monitor with both web interface and terminal UI that di
 - 🖥️ **Terminal UI**: Keyboard navigation with scrolling support
 - 🔌 **Multi-server Support**: Monitor multiple GitLab instances simultaneously
 - ⚡ **Fast**: Parallel API requests for optimal performance
+- 🔐 **Multi-Token Fallback**: Configure multiple tokens per server; automatic failover + health warnings (expiring / expired / invalid)
 
 ## Prerequisites
 
@@ -115,6 +116,100 @@ servers:
 3. Create a new token with at least `read_api` scope
 4. Copy the token to your `config.yaml`
 
+### Multi-Token Support (Redundancy & Health Monitoring)
+
+You can now configure multiple Personal Access Tokens for a single server. The monitor will:
+
+1. Validate each token at startup (and on demand via the endpoint).
+2. Prefer a token with status `valid`.
+3. Fall back to a token marked `expiring` if no fully valid token is available.
+4. Skip tokens that are `expired` or `invalid` (unless no other choice; then the first is used and will fail loudly).
+5. Surface overall health in the UI (badge) and via `/api/token-status`.
+
+Add a `tokens:` array instead of `token:`:
+
+```yaml
+servers:
+  - name: "GitLab Main"
+    url: "https://gitlab.com"
+    tokens:
+      - value: "glpat-PRIMARY123..."
+        name: "Primary Token"
+        expiresAt: "2025-12-31"   # Optional; if omitted we ask GitLab
+      - value: "glpat-BACKUP456..."
+        name: "Backup Token"
+        # expiresAt: "2026-06-30"
+    groups:
+      - path: "my-org/platform"
+        includeSubgroups: true
+```
+
+Legacy single-token configs (`token:`) still work. If both `token:` and `tokens:` are present, `tokens:` takes precedence.
+
+#### Token Health States
+
+| Status     | Meaning                                  | Action Needed                     |
+|------------|-------------------------------------------|-----------------------------------|
+| valid      | Active and not near expiry                | None                              |
+| expiring   | ≤7 days remaining                         | Rotate soon                       |
+| expired    | Past expiry date                          | Replace immediately               |
+| invalid    | 401 / revoked / unreachable               | Fix scopes or generate new token  |
+
+#### Endpoint: `/api/token-status`
+
+Returns aggregated token health:
+
+```json
+{
+  "ok": false,
+  "servers": [
+    {
+      "serverName": "GitLab Main",
+      "tokens": [
+        {
+          "name": "Primary Token",
+          "status": "invalid",
+          "expiresAt": null,
+          "daysRemaining": null,
+          "message": "Failed to validate: Failed to fetch token info: 401 Unauthorized"
+        },
+        {
+          "name": "Backup Token",
+          "status": "valid",
+          "expiresAt": "2025-12-31T00:00:00.000Z",
+          "daysRemaining": 54,
+          "message": "Token expires in 54 days"
+        }
+      ]
+    }
+  ]
+}
+```
+
+`ok` will be `false` if any token is `expiring`, `expired`, or `invalid`.
+
+#### UI Badge
+
+The chart view navigation now shows a badge:
+
+| Badge State | Condition                                      |
+|-------------|------------------------------------------------|
+| OK          | All tokens `valid`                             |
+| Warning     | At least one `expiring` (none invalid/expired) |
+| Error       | Any `invalid` or `expired` token               |
+
+Tooltip lists per-token health details.
+
+#### Debug Script
+
+Run quick validation without starting the server:
+
+```bash
+npm run token-status
+```
+
+Outputs the same JSON as the endpoint.
+
 ## Usage
 
 ### Web Interface (Recommended)
@@ -122,7 +217,7 @@ servers:
 Start the web server:
 
 ```bash
-npm run web
+npm run dev
 ```
 
 Then open your browser at: **http://localhost:3000**

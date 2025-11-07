@@ -74,6 +74,30 @@
     nav button {
       margin: 0;
     }
+
+    /* Token health badge */
+    .token-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .token-badge[data-state="ok"] {
+      background: #dcfce7; color: #166534; border-color: #86efac;
+    }
+    .token-badge[data-state="ok"]::before { content: "🔐"; }
+    .token-badge[data-state="warn"] {
+      background: #fef3c7; color: #92400e; border-color: #fde047;
+    }
+    .token-badge[data-state="warn"]::before { content: "⚠️"; }
+    .token-badge[data-state="error"] {
+      background: #fee2e2; color: #991b1b; border-color: #fca5a5;
+    }
+    .token-badge[data-state="error"]::before { content: "⛔"; }
     
     /* Project card with expandable branches */
     .project-card {
@@ -306,6 +330,7 @@
   <nav>
     <a href="/about">ℹ️ About</a>
     <div class="divider"></div>
+    <span id="token-status" class="token-badge" data-state="ok" title="Tokens: OK">Tokens</span>
     <button id="refresh-btn">
       🔄 Refresh
     </button>
@@ -355,6 +380,46 @@
     setInterval(updateRelativeTimes, 10000);
     document.addEventListener('DOMContentLoaded', function(){ setTimeout(updateRelativeTimes, 100); });
     document.body.addEventListener('htmx:afterSwap', function(){ setTimeout(updateRelativeTimes, 50); });
+    // Token status polling
+    (function(){
+      const el = document.getElementById('token-status');
+      if (!el) return;
+
+      function aggregateState(data){
+        let state = 'ok';
+        let messages = [];
+        if (!data || !Array.isArray(data.servers)) return { state: 'error', title: 'Token status: unavailable' };
+        for (const srv of data.servers){
+          if (!srv || !Array.isArray(srv.tokens)) continue;
+          for (const t of srv.tokens){
+            if (t.status === 'invalid' || t.status === 'expired') state = 'error';
+            else if (state !== 'error' && t.status === 'expiring') state = 'warn';
+            messages.push(`${srv.serverName}: ${t.name} → ${t.status}${t.daysRemaining!=null?` (${t.daysRemaining}d)`:''}`);
+          }
+        }
+        const title = messages.length ? messages.join('\n') : 'No token data';
+        return { state, title };
+      }
+
+      async function refreshTokenStatus(){
+        try {
+          const res = await fetch('/api/token-status', { cache: 'no-store' });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const data = await res.json();
+          const agg = aggregateState(data);
+          el.setAttribute('data-state', agg.state);
+          el.title = agg.title;
+          el.textContent = agg.state === 'ok' ? 'Tokens OK' : (agg.state === 'warn' ? 'Tokens: warning' : 'Tokens: error');
+        } catch (err){
+          el.setAttribute('data-state', 'error');
+          el.textContent = 'Tokens: unavailable';
+          el.title = 'Failed to fetch token status';
+        }
+      }
+
+      refreshTokenStatus();
+      setInterval(refreshTokenStatus, 5*60*1000);
+    })();
     // SSE-driven refresh: request server refresh, then notify UI to update selectively
     (function(){
       const btn = document.getElementById('refresh-btn');

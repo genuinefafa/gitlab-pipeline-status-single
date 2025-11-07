@@ -3,15 +3,45 @@ import { MultiLevelCacheManager } from './multi-level-cache';
 import { GitLabClient } from './gitlab';
 import { loadConfig } from './config';
 import { renderTemplate, generateSafeId, formatStatus } from './template-renderer';
-import { PipelineStatus } from './types';
+import { PipelineStatus, GitLabServer } from './types';
+import { TokenManager } from './token-manager';
 
 const router = express.Router();
 const config = loadConfig();
 const cache = new MultiLevelCacheManager(config.cache);
 
+// Token manager singleton
+export const tokenManager = new TokenManager();
+
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
+
+/**
+ * Get a valid token for a server, using TokenManager fallback if available
+ */
+function getServerToken(serverName: string): string {
+  const server = config.servers.find(s => s.name === serverName);
+  if (!server) {
+    throw new Error(`Server ${serverName} not found in configuration`);
+  }
+
+  // Try to get a validated token from TokenManager first
+  const validatedToken = tokenManager.getValidToken(serverName);
+  if (validatedToken) {
+    return validatedToken;
+  }
+
+  // Fallback to config (supports both legacy single token and new tokens array)
+  if (server.token) {
+    return server.token;
+  }
+  if (server.tokens && server.tokens.length > 0) {
+    return server.tokens[0].value;
+  }
+
+  throw new Error(`No valid tokens configured for server ${serverName}`);
+}
 
 function logRequest(method: string, path: string, params?: any) {
   const timestamp = new Date().toISOString();
@@ -132,7 +162,7 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
         const projectsRes = cache.getGroupsProjects(srv.name);
         const p = projectsRes.data?.find(p => p.path === projectPath);
         if (p) {
-          serverForProject = { name: srv.name, url: srv.url, token: srv.token };
+          serverForProject = { name: srv.name, url: srv.url, token: getServerToken(srv.name) };
           projectInfo = { id: p.id, name: p.name, path: p.path, url: p.url };
           break;
         }
@@ -145,7 +175,8 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
         if (!fallbackServer) {
           throw new Error(`No servers configured`);
         }
-        const client = new GitLabClient(fallbackServer.url, fallbackServer.token);
+        const fallbackToken = getServerToken(fallbackServer.name);
+        const client = new GitLabClient(fallbackServer.url, fallbackToken);
         const projectParts = projectPath.split('/');
         const groupPath = projectParts[0];
         const projects = await client.getGroupProjects({ path: groupPath, includeSubgroups: true });
@@ -153,7 +184,7 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
         if (!found) {
           throw new Error(`Project not found: ${projectPath}`);
         }
-        serverForProject = { name: fallbackServer.name, url: fallbackServer.url, token: fallbackServer.token };
+        serverForProject = { name: fallbackServer.name, url: fallbackServer.url, token: fallbackToken };
         projectInfo = { id: found.id, name: found.name, path: found.path_with_namespace, url: found.web_url };
       }
 
@@ -274,7 +305,7 @@ router.get(/^\/projects\/([^/]+)\/(.+)\/branches$/, async (req: Request, res: Re
         throw new Error(`Server not found: ${serverName}`);
       }
 
-      const client = new GitLabClient(server.url, server.token);
+      const client = new GitLabClient(server.url, getServerToken(serverName));
       
       // Get project details from L1 cache or fetch
       const projectsResult = cache.getGroupsProjects(serverName);
@@ -455,7 +486,7 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
       throw new Error(`Server not found: ${serverName}`);
     }
 
-    const client = new GitLabClient(server.url, server.token);
+    const client = new GitLabClient(server.url, getServerToken(serverName));
     const allProjectConfigs: any[] = [];
 
     // Fetch configured projects
@@ -584,6 +615,33 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
     
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.status(500).send(html);
+  }
+});
+
+// ============================================================================
+// TOKEN STATUS ENDPOINT
+// ============================================================================
+
+router.get('/api/token-status', async (req: Request, res: Response) => {
+  try {
+    // Validate all server tokens (updates internal cache)
+    for (const server of config.servers) {
+      await tokenManager.validateServerTokens(server);
+    }
+    
+    const status = tokenManager.getAllTokenStatus();
+    const hasWarnings = tokenManager.hasWarnings();
+    
+    res.json({
+      ok: !hasWarnings,
+      servers: status,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: (error as Error).message,
+      servers: [],
+    });
   }
 });
 

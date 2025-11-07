@@ -10,7 +10,8 @@
     "prestart": "npm run build",
     "start": "node dist/api-server.js",
     "dev": "npx tsx src/api-server.ts",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "token-status": "npx tsx src/debug-token-status.ts"
   },
   "keywords": [
     "gitlab",

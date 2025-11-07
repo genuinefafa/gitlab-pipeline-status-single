@@ -7,7 +7,7 @@ import { PipelineStatus } from './types';
 
 const router = express.Router();
 const config = loadConfig();
-const cache = new MultiLevelCacheManager();
+const cache = new MultiLevelCacheManager(config.cache);
 
 // ============================================================================
 // UTILITY FUNCTIONS

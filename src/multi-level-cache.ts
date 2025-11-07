@@ -1,22 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { TreeData, ProjectTreeNode, BranchTreeNode } from './types';
+import { TreeData, ProjectTreeNode, BranchTreeNode, CacheTTL } from './types';
 
 const CACHE_DIR = path.join(process.cwd(), '.cache');
-
-/**
- * Cache TTLs (Time To Live) in milliseconds
- * 
- * Multi-level cache strategy:
- * - Level 1: Groups/Projects structure (slow to fetch, changes rarely) → 30 minutes
- * - Level 2: Branches per project (moderate, changes occasionally) → 5 minutes  
- * - Level 3: Pipeline status per branch (fast to fetch, changes frequently) → 5 seconds
- */
-const CACHE_TTL = {
-  GROUPS_PROJECTS: 30 * 60 * 1000,  // 30 minutes
-  BRANCHES: 5 * 60 * 1000,           // 5 minutes
-  PIPELINES: 5 * 1000,               // 5 seconds
-} as const;
 
 interface CacheEntry<T> {
   timestamp: number;
@@ -65,8 +51,16 @@ export class MultiLevelCacheManager {
   private groupsProjectsFile: string;
   private branchesFile: string;
   private pipelinesFile: string;
+  private ttl: {
+    groupsProjects: number; // in milliseconds
+    branches: number;       // in milliseconds
+    pipelines: number;      // in milliseconds
+  };
 
-  constructor() {
+  /**
+   * @param cacheTTL - Cache TTL configuration in seconds (will be converted to milliseconds internally)
+   */
+  constructor(cacheTTL?: CacheTTL) {
     // Ensure cache directory exists
     if (!fs.existsSync(CACHE_DIR)) {
       fs.mkdirSync(CACHE_DIR, { recursive: true });
@@ -75,6 +69,13 @@ export class MultiLevelCacheManager {
     this.groupsProjectsFile = path.join(CACHE_DIR, 'groups-projects.json');
     this.branchesFile = path.join(CACHE_DIR, 'branches.json');
     this.pipelinesFile = path.join(CACHE_DIR, 'pipelines.json');
+
+    // Convert TTL from seconds to milliseconds, with defaults
+    this.ttl = {
+      groupsProjects: (cacheTTL?.groupsProjects ?? 1800) * 1000, // default: 30 minutes
+      branches: (cacheTTL?.branches ?? 300) * 1000,              // default: 5 minutes
+      pipelines: (cacheTTL?.pipelines ?? 5) * 1000,              // default: 5 seconds
+    };
   }
 
   // ============================================================================
@@ -95,7 +96,7 @@ export class MultiLevelCacheManager {
       }
 
       const age = Date.now() - entry.timestamp;
-      const isStale = age > CACHE_TTL.GROUPS_PROJECTS;
+      const isStale = age > this.ttl.groupsProjects;
 
       // Always return data even if stale - never leave client with nothing
       return { 
@@ -146,10 +147,10 @@ export class MultiLevelCacheManager {
       }
 
       const age = Date.now() - entry.timestamp;
-      const isStale = age > CACHE_TTL.BRANCHES;
+      const isStale = age > this.ttl.branches;
 
       // Always return data even if stale - never leave client with nothing
-      return { 
+      return {
         data: entry.branches, 
         isStale,
         age 
@@ -198,10 +199,10 @@ export class MultiLevelCacheManager {
       }
 
       const age = Date.now() - entry.timestamp;
-      const isStale = age > CACHE_TTL.PIPELINES;
+      const isStale = age > this.ttl.pipelines;
 
       // Always return data even if stale - never leave client with nothing
-      return { 
+      return {
         data: entry.pipeline || null, 
         isStale,
         age 

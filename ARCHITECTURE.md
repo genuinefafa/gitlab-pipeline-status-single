@@ -72,31 +72,26 @@ function fetchData() {
 ┌─────────────────────────────────────────┐
 │         Browser (Client)                │
 ├─────────────────────────────────────────┤
-│  index.html                             │
+│  chart.html / about.html                │
 │  ├── Sakura.css (classless styling)    │
-│  ├── htmx (AJAX + client-side templates)│
-│  ├── Mustache.js (template rendering)  │
-│  ├── hyperscript (declarative events)  │
-│  └── Templates (tpl-list, tpl-graph,   │
-│                  tpl-loading, tpl-error)│
-├─────────────────────────────────────────┤
-│  main.js                                │
-│  ├── renderTemplate(id, data) → HTML   │
-│  ├── updateCacheInfo(text only)        │
-│  └── fetchWithProgress(SSE handler)    │
+│  ├── htmx (AJAX + client-side updates) │
+│  └── Mustache.js (template rendering)  │
 └─────────────────────────────────────────┘
-              ↓↑ HTTP/SSE
+              ↓↑ HTTP
 ┌─────────────────────────────────────────┐
-│      Vite Dev Server :3000              │
-│      (proxies /api to :3001)            │
-└─────────────────────────────────────────┘
-              ↓↑
-┌─────────────────────────────────────────┐
-│      Express API Server :3001           │
+│   Express Server :3000 (UNIFIED)        │
 ├─────────────────────────────────────────┤
 │  src/api-server.ts                      │
-│  ├── GET /api/pipelines (JSON)         │
-│  └── GET /api/pipelines/stream (SSE)   │
+│  ├── Static files from public/         │
+│  ├── GET / → chart.html                │
+│  ├── GET /about → about.html           │
+│  └── /api/* → htmx routes              │
+├─────────────────────────────────────────┤
+│  src/api-routes-htmx.ts                 │
+│  ├── GET /api/servers (with cache)     │
+│  ├── GET /api/projects (with cache)    │
+│  ├── GET /api/branches (with cache)    │
+│  └── GET /api/token-status             │
 ├─────────────────────────────────────────┤
 │  src/gitlab.ts                          │
 │  └── GitLabClient (HTTP to GitLab API) │
@@ -141,55 +136,44 @@ function fetchData() {
 - TypeScript interfaces
 - Data contracts between backend and frontend
 
-### Frontend (HTML + JavaScript)
+### Frontend (HTML)
 
-**index.html**
-- Document structure
+**public/chart.html**
+- Main view with tree/graph visualization
 - Sakura.css for classless styling
-- Script imports (htmx, Mustache, hyperscript)
-- **ALL Mustache templates:**
-  - `tpl-list` - Table view of pipelines
-  - `tpl-graph` - Stage/job visualization
-  - `tpl-loading` - Progress state with variable message
-  - `tpl-error` - Error state
-- Navigation buttons with hyperscript event handlers
+- htmx for AJAX requests
+- Mustache templates embedded in HTML
+- No separate JavaScript file needed (htmx handles all interactions)
 
-**main.js**
-- **ZERO HTML strings allowed**
-- `renderTemplate(templateId, data)` - renders Mustache templates
-- `updateCacheInfo(responseText)` - updates cache metadata (text only)
-- `fetchWithProgress(includeJobs, force, templateId)` - SSE handler
-- Only manipulates text via `.textContent`
+**public/about.html**
+- Information and documentation page
+- Links to project resources
+- Same styling as chart view
 
 ## 🔄 Data Flow
 
 ### Standard Request (Cached)
 ```
-User clicks button
-  → hyperscript triggers fetchWithProgress()
-  → JS renders tpl-loading via Mustache
-  → EventSource connects to /api/pipelines/stream
-  → Server checks cache → HIT
-  → Server sends 'complete' event with JSON
-  → JS renders tpl-list or tpl-graph via Mustache
-  → JS updates cache info (textContent)
+User loads page or clicks refresh
+  → htmx sends GET /api/servers or /api/projects
+  → Server checks multi-level cache
+  → Cache HIT → Returns cached JSON
+  → htmx swaps HTML using returned data
+  → Page displays with cache age indicator
 ```
 
 ### Fresh Fetch (Cache Miss)
 ```
-User clicks Refresh (force=true)
-  → JS renders tpl-loading
-  → EventSource connects to /api/pipelines/stream?force=true
+User forces refresh or cache expired
+  → htmx sends GET /api/servers?force=true
   → Server checks cache → MISS
-  → Server sends 'progress' events:
-      - "Connecting to GitLab..."
-      - "Fetching groups..."
-      - "Processing project 3/15..."
-  → JS updates message in tpl-loading (textContent)
-  → Server fetches from GitLab
-  → Server caches data
-  → Server sends 'complete' event with JSON
-  → JS renders final view via Mustache
+  → Server fetches from GitLab API:
+      - Groups and projects (Level 1)
+      - Branches per project (Level 2)
+      - Pipelines per branch (Level 3)
+  → Server caches data at each level
+  → Server returns JSON with metadata
+  → htmx swaps HTML with fresh data
 ```
 
 ## 💾 Multi-Level Cache Strategy
@@ -302,37 +286,25 @@ GET /api/branches/:projectPath/:branchName/pipeline?includeJobs=true
 
 ## 🔌 API Endpoints
 
-### GET `/api/pipelines`
+### GET `/api/servers`
 **Query params:**
-- `includeJobs` (boolean) - fetch pipeline jobs
 - `force` (boolean) - bypass cache
 
 **Response (JSON):**
-```json
-{
-  "data": [{ "serverName": "...", "projects": [...] }],
-  "cached": true,
-  "cacheAge": 23,
-  "cacheDuration": 3.45,
-  "includeJobs": false,
-  "timestamp": 1699123456789
-}
-```
+Returns list of configured GitLab servers with token health status.
 
-### GET `/api/pipelines/stream`
-**Query params:** same as above
+### GET `/api/projects`
+**Query params:**
+- `force` (boolean) - bypass cache
 
-**Response (Server-Sent Events):**
-```
-event: progress
-data: {"message": "Connecting to GitLab...", "stage": "init"}
+**Response (JSON):**
+Returns all projects from all configured servers with branches and pipeline status.
 
-event: progress
-data: {"message": "Processing project 3/15", "current": 3, "total": 15}
+### GET `/api/token-status`
+**No params**
 
-event: complete
-data: {"data": [...], "cached": false, "cacheDuration": 3.45}
-```
+**Response (JSON):**
+Returns health status of all configured GitLab tokens (valid/expiring/expired/invalid).
 
 ## 🚫 Anti-Patterns to AVOID
 
@@ -396,11 +368,11 @@ res.json({ data: { title: "...", items: [...] } });
 ## 🧪 Development Workflow
 
 ```bash
-# Start both servers
+# Start unified Express server
 npm run dev
 
-# Vite dev server: http://localhost:3000
-# API server: http://localhost:3001
+# Server runs on: http://localhost:3000
+# Serves both static files and API endpoints
 ```
 
 **Logs show:**
@@ -411,13 +383,13 @@ npm run dev
 
 ## 📚 Key Dependencies
 
-- **Vite** - Dev server + build tool
-- **Express** - API server
+- **Express** - Unified web server (static + API)
 - **TypeScript** - Backend type safety
 - **Sakura.css** - Classless CSS framework
-- **htmx** - AJAX + client-side templates extension
+- **htmx** - AJAX + client-side updates
 - **Mustache.js** - Logic-less templates
-- **hyperscript** - Declarative event handling
+- **axios** - HTTP client for GitLab API
+- **js-yaml** - Configuration file parsing
 
 ## 🎓 Remember
 

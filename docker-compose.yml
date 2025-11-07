@@ -82,11 +82,13 @@ services:
   #   image: homebridge/homebridge:latest
   #   container_name: homebridge
   #   restart: unless-stopped
-  #   network_mode: host  # Required for HomeKit discovery
+  #   network_mode: host  # Required for HomeKit mDNS discovery
+  #   # NOTE: host networking means nginx proxy won't work
+  #   # Access directly via http://192.168.1.10:8581 (replace with your Pi5 IP)
   #   volumes:
   #     - ./homebridge:/homebridge
   #   environment:
-  #     - TZ=America/Argentina/Buenos_Aires  # Adjust to your timezone
+  #     - TZ=Your/Timezone  # Example: America/New_York, Europe/London, America/Argentina/Buenos_Aires
   #   logging:
   #     driver: "json-file"
   #     options:
@@ -108,8 +110,9 @@ services:
   #     - ./pihole/etc-pihole:/etc/pihole
   #     - ./pihole/etc-dnsmasq.d:/etc/dnsmasq.d
   #   environment:
-  #     - TZ=America/Argentina/Buenos_Aires
-  #     - WEBPASSWORD=your-secure-password-here
+  #     - TZ=Your/Timezone  # Example: America/New_York, Europe/London, America/Argentina/Buenos_Aires
+  #     # ⚠️  SECURITY WARNING: Change password below before deploying! ⚠️
+  #     - WEBPASSWORD=CHANGE_ME_SECURITY_RISK
   #   networks:
   #     - pi-network
   #   logging:
@@ -154,8 +157,9 @@ services:
 #    docker-compose up -d --build
 #
 # ACCESS:
-#   http://gitlab.local      → GitLab Monitor (via nginx)
-#   http://homebridge.local  → Homebridge (via nginx, if enabled)
-#   http://pihole.local      → Pi-hole Admin (via nginx, if enabled)
-#   http://pi5:9000          → Portainer (direct access)
+#   http://gitlab.local        → GitLab Monitor (via nginx)
+#   http://192.168.1.10:8581   → Homebridge (direct access, needs host network)
+#   http://pihole.local        → Pi-hole Admin (via nginx, if enabled)
+#   http://192.168.1.10:9000   → Portainer (direct access)
+#   (Replace 192.168.1.10 with your Pi5 IP address)
 # ============================================================================

@@ -28,18 +28,18 @@ docker-compose logs -f gitlab-monitor
 ```
 
 **Access:**
-- GitLab Monitor: http://gitlab.local or http://pi5-ip
-- Portainer: http://pi5-ip:9000
+- GitLab Monitor: http://gitlab.local or http://192.168.1.10 (replace with your Pi5 IP)
+- Portainer: http://192.168.1.10:9000 (replace with your Pi5 IP)
 
 ## 📦 Architecture
 
 ```
 Pi5 (Host)
 ├── Nginx (port 80) - Reverse proxy
-│   └── Routes traffic to services
-├── GitLab Monitor - Pipeline status
-├── Portainer (port 9000) - Docker management
-└── Optional: Homebridge, Pi-hole, etc.
+│   ├── gitlab.local → GitLab Monitor
+│   └── pihole.local → Pi-hole (if enabled)
+├── Portainer (port 9000) - Direct access
+└── Homebridge (port 8581) - Direct access, host network
 ```
 
 ## ⚙️ Configuration
@@ -80,11 +80,12 @@ Add to your `/etc/hosts` or router DNS:
 
 ```
 192.168.1.10  gitlab.local
-192.168.1.10  homebridge.local
 192.168.1.10  pihole.local
 ```
 
 Replace `192.168.1.10` with your Pi5's IP.
+
+**Note:** Homebridge doesn't need a `.local` domain since it requires direct IP access (http://192.168.1.10:8581) due to host networking requirements.
 
 **Option B: Access by IP**
 
@@ -96,13 +97,18 @@ Modify `nginx/nginx.conf` to use IP-based routing or add a default server block.
 
 1. Uncomment the `homebridge` service in `docker-compose.yml`
 2. Place your Homebridge config in `./homebridge/` directory
-3. Uncomment Homebridge section in `nginx/nginx.conf`
+3. Update the timezone placeholder (`Your/Timezone`)
+4. **Note:** Homebridge uses `network_mode: host` for HomeKit mDNS discovery, which means:
+   - It cannot be proxied through nginx
+   - Access directly at `http://192.168.1.10:8581` (replace with your Pi5 IP)
+   - Do NOT uncomment the nginx homebridge section (it won't work)
 
 **Enable Pi-hole:**
 
 1. Uncomment the `pihole` service in `docker-compose.yml`
-2. Set your admin password in the environment variables
-3. Uncomment Pi-hole section in `nginx/nginx.conf`
+2. **⚠️  IMPORTANT:** Change `WEBPASSWORD` from `CHANGE_ME_SECURITY_RISK` to a secure password
+3. Update the timezone placeholder (`Your/Timezone`)
+4. Uncomment Pi-hole section in `nginx/nginx.conf`
 
 ## 🔧 Docker Commands
 
@@ -321,7 +327,7 @@ docker run --rm \
 
 ### Portainer
 
-Access http://pi5:9000 for:
+Access http://192.168.1.10:9000 (replace with your Pi5 IP) for:
 - Container status and logs
 - Resource usage graphs
 - Quick restart/stop controls

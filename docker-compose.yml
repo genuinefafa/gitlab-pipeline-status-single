@@ -1,5 +1,3 @@
-version: '3.8'
-
 # ============================================================================
 # Pi5 Home Server Docker Stack
 # ============================================================================
@@ -111,8 +109,10 @@ services:
   #     - ./pihole/etc-dnsmasq.d:/etc/dnsmasq.d
   #   environment:
   #     - TZ=Your/Timezone  # Example: America/New_York, Europe/London, America/Argentina/Buenos_Aires
-  #     # ⚠️  SECURITY WARNING: Change password below before deploying! ⚠️
-  #     - WEBPASSWORD=CHANGE_ME_SECURITY_RISK
+  #     # ⚠️  SECURITY WARNING: MUST change password before deploying! ⚠️
+  #     # For production, consider using Docker secrets instead of environment variables
+  #     # See: https://docs.docker.com/engine/swarm/secrets/
+  #     - WEBPASSWORD=REPLACE_WITH_STRONG_PASSWORD_MINIMUM_12_CHARS
   #   networks:
   #     - pi-network
   #   logging:
@@ -131,7 +131,7 @@ services:
     ports:
       - "9000:9000"  # Direct access, bypasses nginx
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
       - portainer-data:/data
     networks:
       - pi-network

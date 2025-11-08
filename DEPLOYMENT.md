@@ -218,6 +218,104 @@ sudo ufw allow 9000/tcp
 sudo ufw enable
 ```
 
+### 5. Docker Secrets for Sensitive Data
+
+Instead of storing passwords in environment variables, use Docker Compose secrets for better security.
+
+**Why use secrets:**
+- ✅ Credentials stored in separate files (not in docker-compose.yml)
+- ✅ Files can be excluded from git
+- ✅ Mounted as read-only in containers
+- ✅ Better access control with file permissions
+
+**How to implement:**
+
+1. **Create secret files:**
+
+```bash
+# Create password file (outside git repo)
+echo "your-strong-password-here" > pihole_password.txt
+
+# Restrict permissions (only you can read)
+chmod 600 pihole_password.txt
+chown $USER:$USER pihole_password.txt
+```
+
+2. **Update docker-compose.yml:**
+
+Add secrets section at the end:
+
+```yaml
+# At the end of docker-compose.yml, after volumes:
+secrets:
+  pihole_password:
+    file: ./pihole_password.txt
+  # Add more secrets as needed:
+  # gitlab_token:
+  #   file: ./gitlab_token.txt
+```
+
+Update the Pi-hole service:
+
+```yaml
+pihole:
+  image: pihole/pihole:latest
+  # ... other config ...
+  secrets:
+    - pihole_password
+  environment:
+    - TZ=Your/Timezone
+    # Use _FILE suffix to read from secret file
+    - WEBPASSWORD_FILE=/run/secrets/pihole_password
+```
+
+3. **Add to .gitignore:**
+
+```bash
+echo "*_password.txt" >> .gitignore
+echo "*_token.txt" >> .gitignore
+echo "*.secret" >> .gitignore
+```
+
+4. **How it works:**
+
+- Docker mounts `pihole_password.txt` as read-only at `/run/secrets/pihole_password`
+- Pi-hole reads the password from the file (via `_FILE` suffix)
+- The actual password never appears in `docker ps` or environment variables
+- File permissions (600) prevent unauthorized access
+
+5. **Verify it's working:**
+
+```bash
+# Start the service
+docker-compose up -d pihole
+
+# Password file is mounted (should show your password)
+docker exec pihole cat /run/secrets/pihole_password
+
+# But NOT exposed as environment variable (should be empty)
+docker exec pihole sh -c 'echo $WEBPASSWORD'
+```
+
+**Alternative: Docker Swarm Secrets (Advanced)**
+
+For production environments requiring encryption at rest:
+
+```bash
+# Initialize swarm mode
+docker swarm init
+
+# Create encrypted secret
+echo "your-password" | docker secret create pihole_password -
+
+# Use docker stack instead of docker-compose
+docker stack deploy -c docker-compose.yml pi-stack
+```
+
+Note: Swarm secrets require using `docker stack` instead of `docker-compose` and have limited Portainer support.
+
+**Recommendation:** For home/Pi5 deployments, Docker Compose file-based secrets provide adequate security. Only use Swarm secrets if you need encryption at rest or multi-node orchestration.
+
 ## 🐛 Troubleshooting
 
 ### Service won't start

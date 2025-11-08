@@ -54,7 +54,10 @@ docker-compose up -d
 - Nginx reverse proxy configuration
 - Integration with Homebridge/Pi-hole
 - HTTPS setup
+- Docker secrets for sensitive credentials
 - Monitoring and backups
+
+**🎬 LibreELEC users:** See [LIBREELEC.md](./LIBREELEC.md) for LibreELEC-specific installation guide
 
 ## Installation (Development / Local)
 

@@ -31,7 +31,32 @@ A GitLab pipeline status monitor with both web interface and terminal UI that di
 - Node.js 18+ or higher
 - GitLab API token(s) with at least `read_api` scope
 
-## Installation
+## 🚀 Quick Start - Docker (Recommended for Production)
+
+**For Raspberry Pi 5 / Home Server deployment:**
+
+```bash
+# 1. Clone and configure
+git clone https://github.com/genuinefafa/gitlab-pipeline-status-single.git
+cd gitlab-pipeline-status-single
+cp config.example.yaml config.yaml
+nano config.yaml  # Add your GitLab tokens
+
+# 2. Start with Docker Compose
+docker-compose up -d
+
+# 3. Access
+# http://gitlab.local (or your Pi IP)
+# http://pi-ip:9000 (Portainer)
+```
+
+**📖 Complete deployment guide:** See [DEPLOYMENT.md](./DEPLOYMENT.md) for full Pi5 setup including:
+- Nginx reverse proxy configuration
+- Integration with Homebridge/Pi-hole
+- HTTPS setup
+- Monitoring and backups
+
+## Installation (Development / Local)
 
 1. Clone or download this repository:
 ```bash

@@ -1,0 +1,165 @@
+# ============================================================================
+# Pi5 Home Server Docker Stack
+# ============================================================================
+# Architecture:
+#   - Nginx: Reverse proxy on port 80 (the "great connector")
+#   - GitLab Monitor: Pipeline status monitor
+#   - Homebridge: HomeKit integration (bring your existing config)
+#   - Pi-hole: Network-wide ad blocker (bring your existing config)
+#   - Portainer: Docker management UI on port 9000 (direct access)
+# ============================================================================
+
+networks:
+  pi-network:
+    driver: bridge
+    name: pi-network
+
+volumes:
+  portainer-data:
+    name: portainer-data
+  gitlab-cache:
+    name: gitlab-cache
+
+services:
+  # ==========================================================================
+  # NGINX - Reverse Proxy (The "Great Connector")
+  # ==========================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      # - "443:443"  # Uncomment for HTTPS
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # - ./nginx/ssl:/etc/nginx/ssl:ro  # Uncomment for HTTPS
+    networks:
+      - pi-network
+    depends_on:
+      - gitlab-monitor
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # GITLAB MONITOR - Pipeline Status Monitor
+  # ==========================================================================
+  gitlab-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gitlab-monitor:latest
+    container_name: gitlab-monitor
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - gitlab-cache:/app/.cache
+    environment:
+      - NODE_ENV=production
+    networks:
+      - pi-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/about"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # HOMEBRIDGE (Optional - uncomment if you have it)
+  # ==========================================================================
+  # homebridge:
+  #   image: homebridge/homebridge:latest
+  #   container_name: homebridge
+  #   restart: unless-stopped
+  #   network_mode: host  # Required for HomeKit mDNS discovery
+  #   # NOTE: host networking means nginx proxy won't work
+  #   # Access directly via http://192.168.1.10:8581 (replace with your Pi5 IP)
+  #   volumes:
+  #     - ./homebridge:/homebridge
+  #   environment:
+  #     - TZ=Your/Timezone  # Example: America/New_York, Europe/London, America/Argentina/Buenos_Aires
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
+
+  # ==========================================================================
+  # PI-HOLE (Optional - uncomment if you have it)
+  # ==========================================================================
+  # pihole:
+  #   image: pihole/pihole:latest
+  #   container_name: pihole
+  #   restart: unless-stopped
+  #   ports:
+  #     - "53:53/tcp"   # DNS
+  #     - "53:53/udp"   # DNS
+  #     # Port 80 handled by nginx reverse proxy
+  #   volumes:
+  #     - ./pihole/etc-pihole:/etc/pihole
+  #     - ./pihole/etc-dnsmasq.d:/etc/dnsmasq.d
+  #   environment:
+  #     - TZ=Your/Timezone  # Example: America/New_York, Europe/London, America/Argentina/Buenos_Aires
+  #     # ⚠️  SECURITY WARNING: MUST change password before deploying! ⚠️
+  #     # For production, consider using Docker secrets instead of environment variables
+  #     # See: https://docs.docker.com/engine/swarm/secrets/
+  #     - WEBPASSWORD=REPLACE_WITH_STRONG_PASSWORD_MINIMUM_12_CHARS
+  #   networks:
+  #     - pi-network
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
+
+  # ==========================================================================
+  # PORTAINER - Docker Management UI (Direct access on port 9000)
+  # ==========================================================================
+  portainer:
+    image: portainer/portainer-ce:alpine
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"  # Direct access, bypasses nginx
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+    networks:
+      - pi-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ============================================================================
+# USAGE:
+# ============================================================================
+# 1. Start all services:
+#    docker-compose up -d
+#
+# 2. View logs:
+#    docker-compose logs -f gitlab-monitor
+#
+# 3. Stop all services:
+#    docker-compose down
+#
+# 4. Rebuild after code changes:
+#    docker-compose up -d --build
+#
+# ACCESS:
+#   http://gitlab.local        → GitLab Monitor (via nginx)
+#   http://192.168.1.10:8581   → Homebridge (direct access, needs host network)
+#   http://pihole.local        → Pi-hole Admin (via nginx, if enabled)
+#   http://192.168.1.10:9000   → Portainer (direct access)
+#   (Replace 192.168.1.10 with your Pi5 IP address)
+# ============================================================================

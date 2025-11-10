@@ -622,7 +622,7 @@ router.get('/servers/:serverName', async (req: Request, res: Response) => {
 // TOKEN STATUS ENDPOINT
 // ============================================================================
 
-router.get('/api/token-status', async (req: Request, res: Response) => {
+router.get('/token-status', async (req: Request, res: Response) => {
   try {
     // Validate all server tokens (updates internal cache)
     for (const server of config.servers) {

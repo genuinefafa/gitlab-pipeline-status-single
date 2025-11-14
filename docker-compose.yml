@@ -142,6 +142,34 @@ services:
         max-file: "3"
 
 # ============================================================================
+# DOCKER SECRETS (Optional - for sensitive credentials)
+# ============================================================================
+# Uncomment this section to use Docker secrets instead of environment variables
+# for sensitive data like passwords and tokens.
+#
+# See DEPLOYMENT.md "Docker Secrets" section for full documentation.
+#
+# secrets:
+#   pihole_password:
+#     file: ./pihole_password.txt
+#   gitlab_token:
+#     file: ./gitlab_token.txt
+#
+# Then update the Pi-hole service above to use the secret:
+#
+# pihole:
+#   secrets:
+#     - pihole_password
+#   environment:
+#     - WEBPASSWORD_FILE=/run/secrets/pihole_password  # Instead of WEBPASSWORD
+#
+# How to create secret files:
+#   echo "your-password-here" > pihole_password.txt
+#   chmod 600 pihole_password.txt
+#   echo "*_password.txt" >> .gitignore
+# ============================================================================
+
+# ============================================================================
 # USAGE:
 # ============================================================================
 # 1. Start all services:

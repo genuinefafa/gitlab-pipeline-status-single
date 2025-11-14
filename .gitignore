@@ -5,3 +5,15 @@ dist/
 config.yaml
 config.yml
 .cache/
+
+# Docker secrets - sensitive credentials
+*_password.txt
+*_token.txt
+*_secret.txt
+*.secret
+pihole_password.txt
+gitlab_token.txt
+
+# PR creation temporary files
+PR-DESCRIPTION.md
+PR-INFO.txt

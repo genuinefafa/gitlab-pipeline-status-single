@@ -42,6 +42,9 @@ RUN npm ci --omit=dev && \
 # Copy compiled code from builder
 COPY --from=builder /build/dist ./dist
 
+# Copy templates (needed at runtime)
+COPY src/templates ./dist/templates
+
 # Copy static files
 COPY public ./public
 

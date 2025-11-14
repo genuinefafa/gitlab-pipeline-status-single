@@ -72,6 +72,23 @@ This uses Docker's default network and exposes port 3000 directly. Perfect for:
 - Existing Docker networks
 - When you don't need nginx/Portainer/other services
 
+**🔧 Manual Docker Deployment (no docker-compose):**
+
+For systems without docker-compose (like LibreELEC):
+
+```bash
+# Run all steps
+./docker-manual-deploy.sh
+
+# Or run specific steps
+./docker-manual-deploy.sh --build          # Only build image
+./docker-manual-deploy.sh --stop --run     # Stop old, start new
+./docker-manual-deploy.sh -b -s -r -i      # Build, stop, run, show info
+./docker-manual-deploy.sh --help           # See all options
+```
+
+The script automatically generates version information from git during build.
+
 ## Installation (Development / Local)
 
 1. Clone or download this repository:
@@ -379,6 +396,20 @@ The web interface uses a local file-based cache to improve performance:
 - **Auto-generated**: Cache directory is created automatically on first run
 
 ## Troubleshooting
+
+### Check version information
+
+To verify which version is running:
+
+```bash
+# Via API endpoint
+curl http://localhost:3000/api/version
+
+# Or check Docker logs on startup
+docker logs gitlab-monitor | head -10
+```
+
+The version includes git commit hash and build date for tracking deployments.
 
 ### Authentication errors
 - Verify your token has the correct permissions (`read_api` scope)

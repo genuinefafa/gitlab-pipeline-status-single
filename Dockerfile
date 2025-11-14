@@ -48,6 +48,9 @@ COPY src/templates ./dist/templates
 # Copy static files
 COPY public ./public
 
+# Copy version information (generated before build)
+COPY VERSION ./dist/VERSION
+
 # Create cache directory with proper permissions
 RUN mkdir -p /app/.cache && \
     chown -R node:node /app

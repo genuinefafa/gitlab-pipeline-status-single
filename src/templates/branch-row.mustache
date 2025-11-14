@@ -13,6 +13,9 @@
       <a href="{{web_url}}" target="_blank">
         <mark data-status="{{status}}">{{statusText}}</mark>
       </a>
+      {{#hasDuration}}
+        <small class="duration-text"> ⏱️ {{durationText}}</small>
+      {{/hasDuration}}
       <span id="spinner-{{safeId}}" class="htmx-indicator">⏳</span>
       {{#hasJobs}}
         <details class="jobs-details">

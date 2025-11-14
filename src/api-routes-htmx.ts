@@ -5,6 +5,7 @@ import { loadConfig } from './config';
 import { renderTemplate, generateSafeId, formatStatus } from './template-renderer';
 import { PipelineStatus, GitLabServer } from './types';
 import { TokenManager } from './token-manager';
+import { formatPipelineDuration, formatDuration } from './pipeline-statistics';
 
 const router = express.Router();
 const config = loadConfig();
@@ -146,17 +147,19 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
     // Try to get branch commit info from L2 cache (used for summary rendering when no pipeline)
     const branchesCache = cache.getBranches(projectPath);
     const branchMeta = branchesCache.data?.find(b => b.name === branchName);
-    
+
+    // Declare these outside the if block so they're accessible later for statistics
+    let serverForProject: { name: string, url: string, token: string } | null = null;
+    let projectInfo: { id: number, name: string, path: string, url: string } | null = null;
+
     if (cacheResult.data === null || cacheResult.isStale) {
       logCache('3', `${projectPath}:${branchName}`, cacheResult.data !== null, cacheResult.isStale);
-      
+
       // Mark as refreshing if we have stale data
       isRefreshing = cacheResult.isStale && cacheResult.data !== null;
-      
+
       // Need to fetch from GitLab (either no data or stale data)
       // 1) Try to resolve project & server from L1 cache for reliability
-      let serverForProject: { name: string, url: string, token: string } | null = null;
-      let projectInfo: { id: number, name: string, path: string, url: string } | null = null;
 
       for (const srv of config.servers) {
         const projectsRes = cache.getGroupsProjects(srv.name);
@@ -190,7 +193,7 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
 
       const client = new GitLabClient(serverForProject.url, serverForProject.token);
       const freshPipeline = await client.getLatestPipeline(projectInfo!.id, branchName);
-      
+
       if (includeJobs && freshPipeline) {
         const jobs = await client.getPipelineJobs(projectInfo!.id, freshPipeline.id);
         freshPipeline.jobs = jobs;
@@ -198,13 +201,42 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
 
       // Cache the fresh data
       cache.setPipeline(projectPath, branchName, freshPipeline, includeJobs);
-      
+
       // Use fresh data if we didn't have stale data to show
       if (!isRefreshing) {
         pipeline = freshPipeline;
       }
     } else {
       logCache('3', `${projectPath}:${branchName}`, true, false);
+
+      // For cached data, we still need project info for statistics
+      for (const srv of config.servers) {
+        const projectsRes = cache.getGroupsProjects(srv.name);
+        const p = projectsRes.data?.find(p => p.path === projectPath);
+        if (p) {
+          serverForProject = { name: srv.name, url: srv.url, token: getServerToken(srv.name) };
+          projectInfo = { id: p.id, name: p.name, path: p.path, url: p.url };
+          break;
+        }
+      }
+    }
+
+    // Get estimated duration from statistics (for both fresh and cached pipeline)
+    // This is separate from pipeline data since it's calculated from historical data
+    let estimatedDuration: number | null = null;
+    if (pipeline && projectInfo && serverForProject) {
+      // Try to get from our statistics cache in api-server
+      // For now, we'll compute it on-demand since htmx routes don't have direct access to the CacheManager
+      // We could enhance this later by sharing the statistics cache
+      try {
+        const { getPipelineStatistics } = await import('./pipeline-statistics');
+        const client = new GitLabClient(serverForProject.url, serverForProject.token);
+        const stats = await getPipelineStatistics(client, projectInfo.id, branchName, 10);
+        estimatedDuration = stats.estimatedDuration;
+      } catch (error) {
+        // Silently fail - estimation is optional
+        logError(`Fetch statistics for ${projectPath}/${branchName}`, error as Error);
+      }
     }
 
     // Group jobs by stage if available
@@ -238,6 +270,8 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
       pipeline: pipeline ? {
         ...pipeline,
         statusText: formatStatus(pipeline.status),
+        durationText: formatPipelineDuration(pipeline, estimatedDuration),
+        hasDuration: pipeline.duration !== null || pipeline.status === 'running',
       } : undefined,
       hasJobs: pipeline?.jobs && pipeline.jobs.length > 0,
       stages,
@@ -245,6 +279,7 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
       jobsWereRequested,
       commitTitle: branchMeta?.commitTitle || pipeline?.ref || '',
       commitShortId: branchMeta?.commitShortId || (pipeline?.sha ? pipeline.sha.substring(0,8) : ''),
+      estimatedDuration: estimatedDuration !== null ? formatDuration(estimatedDuration) : null,
     });
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');

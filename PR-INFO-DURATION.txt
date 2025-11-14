@@ -1,0 +1,77 @@
+PR Title:
+feat: add pipeline duration tracking and estimation
+
+PR Description:
+## Summary
+
+Adds pipeline duration tracking and estimation based on historical data to provide better visibility into execution times and predict completion for running pipelines.
+
+## Features
+
+**Pipeline Duration Display:**
+- Completed: `SUCCESS ⏱️ 7m 45s`
+- Running: `RUNNING ⏱️ 2m 15s / ~7m 30s` (elapsed / estimated total)
+- No data: `RUNNING ⏱️ 2m 15s / ?`
+
+**Estimation Algorithm:**
+- Median of last 10 successful pipelines (same branch)
+- Excludes canceled/skipped pipelines
+- Branch-specific estimations
+
+**Caching:**
+- Statistics cached for 30 minutes
+- Separate from pipeline cache
+- Per-branch caching: `projectId:branchName`
+
+## Implementation
+
+**New Files:**
+- `src/pipeline-statistics.ts` (103 lines) - Duration calculation and formatting
+
+**Type Updates (src/types.ts):**
+- `Pipeline`: Added `duration`, `started_at`, `finished_at`
+- `PipelineStatistics`: New interface for branch statistics
+- `BranchTreeNode`: Added `estimatedDuration` field
+- `CacheTTL`: Added `statistics` field (30min default)
+
+**GitLab Client (src/gitlab.ts):**
+- `getRecentPipelines()` - Fetch last N pipelines with filtering
+
+**Cache Manager (src/cache.ts):**
+- `getStatistics()`, `setStatistics()`, `clearStatistics()`
+
+**Data Fetching:**
+- `api-server.ts` - Integrated statistics in main fetch loop
+- `api-routes-htmx.ts` - On-demand calculation for real-time updates
+
+**Templates:**
+- `branch-row.mustache`, `branch-row-content.mustache`, `branch-chart-summary.mustache`
+- Added duration display after status badge
+
+## Benefits
+
+✅ Better visibility into pipeline execution times
+✅ Predictable completion times for running pipelines
+✅ Historical context per branch
+✅ Minimal overhead (30min caching)
+✅ Robust estimations (median algorithm)
+
+## Technical Notes
+
+**Why median?** More robust to outliers than average
+**Why filter?** Canceled/skipped don't represent normal execution
+**Why 30min cache?** Patterns don't change frequently, reduces API load
+
+## Backward Compatibility
+
+✅ No breaking changes
+✅ Pipeline fields already exist in GitLab API
+✅ Duration display is conditional (hidden if no data)
+✅ Statistics cache is separate from existing caches
+
+## Files Changed
+
+- New: `src/pipeline-statistics.ts`
+- Modified: `src/types.ts`, `src/gitlab.ts`, `src/cache.ts`
+- Modified: `src/api-server.ts`, `src/api-routes-htmx.ts`
+- Modified: 3 template files

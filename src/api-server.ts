@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { CacheManager } from './cache';
 import { GitLabClient } from './gitlab';
@@ -11,6 +11,43 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const config = loadConfig();
 const cache = new CacheManager();
+
+// ============================================================================
+// VERSION INFORMATION
+// ============================================================================
+
+interface VersionInfo {
+  version: string;
+  commit: string;
+  commitShort: string;
+  branch: string;
+  tag: string;
+  buildDate: string;
+}
+
+function loadVersion(): VersionInfo {
+  const versionPath = join(__dirname, 'VERSION');
+  try {
+    if (existsSync(versionPath)) {
+      const versionData = readFileSync(versionPath, 'utf-8');
+      return JSON.parse(versionData);
+    }
+  } catch (error) {
+    console.warn('⚠️  Could not read VERSION file:', (error as Error).message);
+  }
+
+  // Fallback version
+  return {
+    version: 'dev',
+    commit: 'unknown',
+    commitShort: 'unknown',
+    branch: 'unknown',
+    tag: '',
+    buildDate: new Date().toISOString()
+  };
+}
+
+const versionInfo = loadVersion();
 
 // ============================================================================
 // STATIC FILES
@@ -29,6 +66,11 @@ app.get('/', (_req: Request, res: Response) => {
 // About page
 app.get('/about', (_req: Request, res: Response) => {
   res.sendFile(join(__dirname, '../public/about.html'));
+});
+
+// Version endpoint
+app.get('/api/version', (_req: Request, res: Response) => {
+  res.json(versionInfo);
 });
 
 // ============================================================================
@@ -419,15 +461,18 @@ app.get('/api/pipelines/stream', async (req: Request, res: Response) => {
 });
 
 app.listen(PORT, async () => {
-  console.log(`\n🚀 API Server running on http://localhost:${PORT}`);
+  console.log(`\n🚀 GitLab Pipeline Status Monitor`);
+  console.log(`📦 Version: ${versionInfo.version} (${versionInfo.commitShort})`);
+  console.log(`📅 Built: ${versionInfo.buildDate}`);
+  console.log(`🌐 Server: http://localhost:${PORT}`);
   console.log(`📡 Monitoring ${config.servers.length} GitLab server(s)`);
-  
+
   // Validate tokens on startup
   console.log(`\n🔐 Validating GitLab tokens...`);
   for (const server of config.servers) {
     await tokenManager.validateServerTokens(server);
   }
-  
+
   if (tokenManager.hasWarnings()) {
     console.warn(`\n⚠️  WARNING: Some tokens are expiring or invalid. Check token status for details.\n`);
   } else {

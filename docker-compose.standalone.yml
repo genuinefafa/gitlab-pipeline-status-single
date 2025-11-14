@@ -1,0 +1,72 @@
+# ============================================================================
+# GitLab Pipeline Monitor - Standalone Docker Compose
+# ============================================================================
+# Simplified configuration for running just the GitLab Monitor without nginx,
+# Portainer, or custom networks. Uses Docker's default bridge network.
+#
+# Usage:
+#   docker-compose -f docker-compose.standalone.yml up -d
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # GITLAB MONITOR - Pipeline Status Monitor (Standalone)
+  # ==========================================================================
+  gitlab-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gitlab-monitor:latest
+    container_name: gitlab-monitor
+    restart: unless-stopped
+    ports:
+      - "3000:3000"  # Direct access on port 3000
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - gitlab-cache:/app/.cache
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/about"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  gitlab-cache:
+    name: gitlab-cache
+
+# ============================================================================
+# USAGE:
+# ============================================================================
+# 1. Create config:
+#    cp config.example.yaml config.yaml
+#    nano config.yaml  # Add your GitLab tokens
+#
+# 2. Build and start:
+#    docker-compose -f docker-compose.standalone.yml up -d
+#
+# 3. Access:
+#    http://localhost:3000
+#
+# 4. View logs:
+#    docker-compose -f docker-compose.standalone.yml logs -f
+#
+# 5. Stop:
+#    docker-compose -f docker-compose.standalone.yml down
+# ============================================================================
+
+# ============================================================================
+# NOTES:
+# ============================================================================
+# - Uses Docker's default bridge network (no custom network defined)
+# - Exposes port 3000 directly (no reverse proxy)
+# - No Portainer, nginx, homebridge, or pi-hole
+# - For full Pi5 home server setup, use docker-compose.yml instead
+# ============================================================================

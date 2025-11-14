@@ -59,6 +59,20 @@ docker-compose up -d
 
 **🎬 LibreELEC users:** See [LIBREELEC.md](./LIBREELEC.md) for LibreELEC-specific installation guide
 
+**⚡ Standalone Docker (just the monitor, no nginx):**
+
+```bash
+# For simple setups without reverse proxy
+docker-compose -f docker-compose.standalone.yml up -d
+
+# Access at http://localhost:3000
+```
+
+This uses Docker's default network and exposes port 3000 directly. Perfect for:
+- Development and testing
+- Existing Docker networks
+- When you don't need nginx/Portainer/other services
+
 ## Installation (Development / Local)
 
 1. Clone or download this repository:

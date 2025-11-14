@@ -6,6 +6,7 @@ import { GitLabClient } from './gitlab';
 import { TreeData, ProjectTreeNode, ProjectConfig } from './types';
 import { loadConfig } from './config';
 import htmxRoutes, { tokenManager } from './api-routes-htmx';
+import { getPipelineStatistics } from './pipeline-statistics';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -209,11 +210,31 @@ async function fetchPipelineData(includeJobs: boolean = false): Promise<TreeData
                 pipeline.jobs = jobs;
               }
 
+              // Fetch or calculate pipeline statistics for duration estimation
+              let estimatedDuration: number | null = null;
+              try {
+                // Check cache first
+                const cachedStats = cache.getStatistics(project.id, branch.name);
+                if (cachedStats) {
+                  estimatedDuration = cachedStats.estimatedDuration;
+                } else {
+                  // Calculate statistics from recent pipelines
+                  const stats = await getPipelineStatistics(client, project.id, branch.name, 10);
+                  estimatedDuration = stats.estimatedDuration;
+                  // Cache the statistics for 30 minutes
+                  cache.setStatistics(project.id, branch.name, stats);
+                }
+              } catch (error) {
+                // If statistics fetch fails, just log and continue without estimation
+                logError(`Fetch statistics for ${project.path_with_namespace}/${branch.name}`, error as Error);
+              }
+
               return {
                 name: branch.name,
                 commitTitle: branch.commit.title,
                 commitShortId: branch.commit.short_id,
                 pipeline: pipeline || undefined,
+                estimatedDuration,
               };
             } catch (error) {
               logError(`Fetch pipeline for ${project.path_with_namespace}/${branch.name}`, error as Error);

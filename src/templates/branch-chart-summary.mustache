@@ -10,6 +10,9 @@
   hx-swap="outerHTML">
   {{#pipeline}}
     <mark data-status="{{status}}">{{statusText}}</mark>
+    {{#hasDuration}}
+      <small class="duration-text"> ⏱️ {{durationText}}</small>
+    {{/hasDuration}}
     <span class="commit-info" title="{{../commitTitle}}">{{../commitShortId}}</span>
     <span id="spinner-{{safeId}}" class="htmx-indicator">⏳</span>
   {{/pipeline}}

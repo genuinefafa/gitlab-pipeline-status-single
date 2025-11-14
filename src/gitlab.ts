@@ -130,6 +130,53 @@ export class GitLabClient {
     }
   }
 
+  /**
+   * Get last N pipelines for a branch (for statistics/estimation)
+   * Excludes canceled and skipped pipelines as they don't represent normal execution time
+   */
+  async getRecentPipelines(
+    projectId: number,
+    branchName: string,
+    count: number = 10
+  ): Promise<Pipeline[]> {
+    try {
+      const response = await this.client.get<Pipeline[]>(
+        `/projects/${projectId}/pipelines`,
+        {
+          params: {
+            ref: branchName,
+            per_page: count * 2, // Fetch extra to account for filtering
+            order_by: 'updated_at',
+            sort: 'desc',
+          },
+        }
+      );
+
+      // Filter out canceled/skipped and keep only finished pipelines with duration
+      const validPipelines = response.data
+        .filter(
+          (p) =>
+            p.status !== 'canceled' &&
+            p.status !== 'skipped' &&
+            p.duration !== null &&
+            p.duration > 0
+        )
+        .slice(0, count); // Take only the requested count after filtering
+
+      return validPipelines;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 403) {
+          return [];
+        }
+        throw new Error(
+          `Failed to fetch recent pipelines: ${error.response?.status} ${error.response?.statusText}`
+        );
+      }
+      throw error;
+    }
+  }
+
   async getPipelineJobs(projectId: number, pipelineId: number) {
     try {
       const response = await this.client.get(

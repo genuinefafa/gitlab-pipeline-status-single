@@ -2,6 +2,7 @@ export interface CacheTTL {
   groupsProjects?: number; // TTL in seconds for groups/projects cache (default: 1800s = 30min)
   branches?: number;       // TTL in seconds for branches cache (default: 300s = 5min)
   pipelines?: number;      // TTL in seconds for pipeline status cache (default: 5s)
+  statistics?: number;     // TTL in seconds for pipeline statistics cache (default: 1800s = 30min)
 }
 
 export interface Config {
@@ -69,7 +70,18 @@ export interface Pipeline {
   web_url: string;
   created_at: string;
   updated_at: string;
+  duration: number | null;      // Duration in seconds, null if not finished
+  started_at: string | null;    // ISO timestamp when pipeline started
+  finished_at: string | null;   // ISO timestamp when pipeline finished
   jobs?: PipelineJob[];
+}
+
+export interface PipelineStatistics {
+  projectId: number;
+  branchName: string;
+  estimatedDuration: number | null;  // Median duration in seconds, null if not enough data
+  sampleSize: number;                // Number of pipelines used for estimation
+  lastUpdated: string;               // ISO timestamp
 }
 
 export interface PipelineJob {
@@ -133,5 +145,6 @@ export interface BranchTreeNode {
   commitTitle?: string;
   commitShortId?: string;
   pipeline?: Pipeline;
+  estimatedDuration?: number | null; // Estimated duration in seconds based on history
   error?: string;
 }

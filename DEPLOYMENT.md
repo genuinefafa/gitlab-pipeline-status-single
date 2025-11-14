@@ -42,6 +42,76 @@ Pi5 (Host)
 └── Homebridge (port 8581) - Direct access, host network
 ```
 
+## 📡 Real-time Updates (Server-Sent Events)
+
+The GitLab Monitor uses **Server-Sent Events (SSE)** for real-time pipeline updates without polling.
+
+### How It Works
+
+- **Endpoint**: `/api/pipelines/stream`
+- **Protocol**: SSE (Server-Sent Events) over HTTP/1.1
+- **Connection**: Long-lived (can stay open for minutes)
+- **Updates**: Server pushes new pipeline status as events happen
+
+### Nginx Configuration for SSE
+
+The nginx configuration has been optimized for SSE:
+
+**Critical settings:**
+```nginx
+# Disable buffering - CRITICAL for SSE to work
+proxy_buffering off;
+proxy_cache off;
+proxy_set_header X-Accel-Buffering no;
+
+# Extended timeouts for long-lived connections
+proxy_read_timeout 300s;  # 5 minutes
+proxy_send_timeout 300s;  # 5 minutes
+
+# Connection handling for both SSE and WebSocket
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      '';  # For SSE, don't send "Connection: upgrade"
+}
+```
+
+**Why these settings matter:**
+- `proxy_buffering off` - Without this, nginx buffers events causing delays of seconds or minutes
+- Extended timeouts - SSE connections stay open, default 60s timeout would kill them
+- Connection map - Properly handles both SSE (no upgrade) and WebSocket (upgrade)
+
+### Verifying SSE Works
+
+Test SSE through nginx:
+
+```bash
+# Direct to app (should work)
+curl -N http://gitlab-monitor:3000/api/pipelines/stream
+
+# Through nginx (should also work with correct config)
+curl -N http://gitlab.local/api/pipelines/stream
+```
+
+Both should stream events in real-time with `data: {...}` messages.
+
+### Troubleshooting SSE
+
+**Symptoms of buffering issues:**
+- Pipeline updates delayed by 30-60 seconds
+- Updates arrive in bursts instead of real-time
+- Connection drops after 60 seconds
+
+**Solutions:**
+1. Verify `proxy_buffering off` is set in nginx.conf
+2. Check nginx error logs: `docker logs nginx-proxy`
+3. Test direct connection vs. through nginx to isolate issue
+4. Ensure timeouts are set to 300s or higher
+
+**If using a different reverse proxy:**
+- Disable all buffering
+- Set timeouts to at least 300s
+- Don't modify `Connection` header for SSE requests
+
 ## ⚙️ Configuration
 
 ### 1. GitLab API Configuration

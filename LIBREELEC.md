@@ -101,17 +101,74 @@ To edit in vi:
 - Make your changes
 - Press `ESC` then type `:wq` and press ENTER to save
 
-### 5. Build and start the stack
+### 5. Build and start (LibreELEC doesn't have docker-compose)
+
+**LibreELEC 12 doesn't include docker-compose**, so you need to use pure Docker commands.
+
+**Option A: Use the deployment script (easiest)**
 
 ```bash
-# Verify Docker is running
-docker ps
+# Make script executable
+chmod +x docker-manual-deploy.sh
 
-# Build and start services
-docker-compose up -d
+# Run the deployment script
+./docker-manual-deploy.sh
+```
 
-# Check logs
-docker-compose logs -f gitlab-monitor
+The script will:
+- ✅ Check config exists
+- ✅ Create cache volume
+- ✅ Build the image
+- ✅ Stop old container (if exists)
+- ✅ Start new container
+- ✅ Show access information
+
+**Option B: Manual Docker commands (step by step)**
+
+```bash
+# 1. Create volume for cache
+docker volume create gitlab-cache
+
+# 2. Build the image (takes 5-10 minutes on Pi5)
+docker build -t gitlab-monitor:latest .
+
+# 3. Run the container
+docker run -d \
+  --name gitlab-monitor \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v "$(pwd)/config.yaml:/app/config.yaml:ro" \
+  -v gitlab-cache:/app/.cache \
+  -e NODE_ENV=production \
+  gitlab-monitor:latest
+
+# 4. Check logs
+docker logs -f gitlab-monitor
+```
+
+**Useful commands:**
+
+```bash
+# View logs
+docker logs -f gitlab-monitor
+
+# Stop container
+docker stop gitlab-monitor
+
+# Start container
+docker start gitlab-monitor
+
+# Restart container
+docker restart gitlab-monitor
+
+# Remove container (doesn't delete volume)
+docker rm -f gitlab-monitor
+
+# Rebuild after changes
+docker build -t gitlab-monitor:latest . --no-cache
+docker stop gitlab-monitor
+docker rm gitlab-monitor
+# Then run the docker run command again
 ```
 
 ### 6. Configure network access
@@ -137,9 +194,9 @@ Then access via:
 
 ## 🔧 LibreELEC-Specific Configuration
 
-### Docker Compose location
+### Docker location
 
-LibreELEC looks for docker-compose files in `/storage/docker/`. Our setup at `/storage/docker/gitlab-monitor` works perfectly.
+All Docker data should be under `/storage/docker/` for persistence. Our setup at `/storage/docker/gitlab-monitor` is perfect.
 
 ### Persistence across reboots
 
@@ -147,10 +204,11 @@ Everything under `/storage` persists across reboots. Your configuration includes
 
 ```
 /storage/docker/gitlab-monitor/
-├── config.yaml          # Your GitLab config (persists)
-├── docker-compose.yml   # Stack definition (persists)
-├── nginx/               # Nginx config (persists)
-├── Dockerfile          # Build file (persists)
+├── config.yaml                 # Your GitLab config (persists)
+├── docker-manual-deploy.sh     # Deployment script (persists)
+├── Dockerfile                  # Build file (persists)
+├── src/                        # Source code (persists)
+├── public/                     # Static files (persists)
 └── ... (all project files persist)
 ```
 
@@ -175,8 +233,7 @@ Add:
 #!/bin/sh
 (
   sleep 30  # Wait for Docker to be ready
-  cd /storage/docker/gitlab-monitor
-  docker-compose up -d
+  docker start gitlab-monitor
 ) &
 ```
 
@@ -185,9 +242,9 @@ Make executable:
 chmod +x /storage/.config/autostart.sh
 ```
 
-**Option 2: Using Docker restart policies (already configured)**
+**Option 2: Using Docker restart policy (already configured)**
 
-The docker-compose.yml already has `restart: unless-stopped` for all services, so they'll restart automatically after reboot once Docker is ready.
+The container is started with `--restart unless-stopped`, so it will restart automatically after reboot once Docker is ready. This is the recommended option - no autostart.sh needed!
 
 ### Checking Docker on LibreELEC
 
@@ -268,14 +325,16 @@ docker logs nginx-proxy
 ```bash
 cd /storage/docker/gitlab-monitor
 
-# Stop and remove all containers
-docker-compose down
+# Stop and remove container
+docker stop gitlab-monitor
+docker rm gitlab-monitor
 
-# Remove volumes (WARNING: deletes all data)
-docker volume rm gitlab-cache portainer-data
+# Remove volumes (WARNING: deletes all cached data)
+docker volume rm gitlab-cache
 
 # Restart fresh
-docker-compose up -d
+./docker-manual-deploy.sh
+# Or manually: docker run -d --name gitlab-monitor ...
 ```
 
 ## 📊 Resource Usage on Pi5
@@ -293,16 +352,20 @@ This is minimal and won't affect Kodi performance.
 
 ## 🔐 Using Docker Secrets on LibreELEC
 
-For sensitive data like Pi-hole passwords, use Docker Compose secrets:
+For sensitive data, store them in separate files with restricted permissions:
 
 ```bash
-# Create password file
+# Create password/token files
 cd /storage/docker/gitlab-monitor
-echo "your-secure-password" > pihole_password.txt
-chmod 600 pihole_password.txt
+echo "your-secure-password" > gitlab_token.txt
+chmod 600 gitlab_token.txt
+
+# Reference in config.yaml instead of hardcoding
+# config.yaml uses the token directly, but keeping it
+# in a separate file allows better access control
 ```
 
-Then see DEPLOYMENT.md "Docker Secrets" section for docker-compose.yml configuration.
+For more advanced secrets management with docker-compose (requires installing compose), see DEPLOYMENT.md "Docker Secrets" section.
 
 ## 🔄 Updating the Application
 
@@ -311,33 +374,36 @@ Since LibreELEC doesn't have git:
 ```bash
 cd /storage/docker/gitlab-monitor
 
-# Stop services
-docker-compose down
+# 1. Stop and remove container
+docker stop gitlab-monitor
+docker rm gitlab-monitor
 
-# Backup your config
+# 2. Backup your config
 cp config.yaml /storage/config.yaml.backup
 
-# Download new version (Option A)
+# 3. Download new version
 wget https://github.com/genuinefafa/gitlab-pipeline-status-single/archive/refs/heads/main.zip
 unzip main.zip
 cp -r gitlab-pipeline-status-single-main/* .
 rm -rf gitlab-pipeline-status-single-main main.zip
 
-# Restore your config
+# 4. Restore your config
 cp /storage/config.yaml.backup config.yaml
 
-# Rebuild and restart
-docker-compose up -d --build
+# 5. Rebuild and restart
+chmod +x docker-manual-deploy.sh
+./docker-manual-deploy.sh
 ```
 
 ## 💡 Tips for LibreELEC
 
-1. **Use Portainer**: Install Portainer (already in docker-compose.yml) for web-based Docker management
+1. **No docker-compose needed**: The manual script handles everything
 2. **SSH keys**: Set up SSH key authentication instead of password
 3. **Backups**: Regularly backup `/storage/docker/gitlab-monitor/config.yaml`
 4. **Monitoring**: Keep an eye on disk space with `df -h /storage`
-5. **Logs**: Use `docker-compose logs -f` to monitor application logs
+5. **Logs**: Use `docker logs -f gitlab-monitor` to monitor application logs
 6. **Updates**: Subscribe to GitHub releases for notifications
+7. **Auto-restart**: The `--restart unless-stopped` policy means it survives reboots
 
 ## 📚 Additional Resources
 
@@ -351,7 +417,8 @@ docker-compose up -d --build
 If you encounter issues specific to LibreELEC:
 
 1. Check LibreELEC system logs: `journalctl -xe`
-2. Check Docker logs: `docker-compose logs -f`
+2. Check Docker logs: `docker logs -f gitlab-monitor`
 3. Verify Docker is running: `systemctl status docker`
 4. Check available disk space: `df -h`
-5. Report issues on GitHub with "LibreELEC" label
+5. Check container status: `docker ps -a`
+6. Report issues on GitHub with "LibreELEC" label

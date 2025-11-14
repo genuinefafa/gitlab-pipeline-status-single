@@ -1,6 +1,6 @@
 # GitLab Pipeline Status Monitor
 
-A GitLab pipeline status monitor with both web interface and terminal UI that displays projects, branches, and their pipeline statuses with auto-refresh capabilities.
+A GitLab pipeline status monitor with a web interface that displays projects, branches, and their pipeline statuses with real-time updates.
 
 ## Features
 
@@ -21,7 +21,6 @@ A GitLab pipeline status monitor with both web interface and terminal UI that di
   - ⊘ Canceled (magenta)
   - ⊝ Skipped (gray)
   - ⊙ Manual (cyan)
-- 🖥️ **Terminal UI**: Keyboard navigation with scrolling support
 - 🔌 **Multi-server Support**: Monitor multiple GitLab instances simultaneously
 - ⚡ **Fast**: Parallel API requests for optimal performance
 - 🔐 **Multi-Token Fallback**: Configure multiple tokens per server; automatic failover + health warnings (expiring / expired / invalid)
@@ -276,50 +275,6 @@ Then open your browser at: **http://localhost:3000**
 - 🎨 **Color-coded status badges** for quick visual feedback
 - 🔗 **Clickable links** to GitLab projects and pipelines
 
-### Terminal UI (Legacy)
-
-For terminal-based monitoring:
-
-```bash
-npm start
-```
-
-With a custom config file:
-
-```bash
-npm start path/to/custom-config.yaml
-```
-
-Or development mode:
-
-```bash
-npm run dev
-```
-
-#### Keyboard Controls (Terminal UI only):
-
-**Navigation:**
-- `↑`/`k` - Scroll up
-- `↓`/`j` - Scroll down
-- `Page Up` - Scroll up one page
-- `Page Down` - Scroll down one page
-
-**Actions:**
-- `q` or `Esc` or `Ctrl+C` - Quit the application
-- `r` - Manual refresh (re-fetch all data)
-- `f` or `/` - Filter projects (search by name or path)
-- `c` - Clear active filter
-
-**Filtering:**
-When monitoring many projects (especially from groups), you can use the filter to focus on specific projects:
-1. Press `f` or `/` to open the filter input
-2. Type part of a project name or path (case-insensitive)
-3. Press `Enter` to apply the filter
-4. Only matching projects will be displayed
-5. Press `c` to clear the filter and show all projects again
-
-Example: Filter for "backend" to see only projects with "backend" in their name or path.
-
 ## Example Output
 
 ```
@@ -359,14 +314,15 @@ Last update: 10:30:45 AM | Next update in: 25s | f:filter c:clear r:refresh q:qu
 ```
 .
 ├── src/
-│   ├── server.ts     # Web server (Express)
-│   ├── cache.ts      # Cache management
-│   ├── index.ts      # Terminal UI entry point
-│   ├── config.ts     # Configuration loader
-│   ├── gitlab.ts     # GitLab API client
-│   ├── ui.ts         # Terminal UI with blessed
-│   └── types.ts      # TypeScript type definitions
-├── .cache/           # Cache directory (auto-generated)
+│   ├── api-server.ts      # Main Express server with SSE support
+│   ├── api-routes-htmx.ts # htmx-powered AJAX routes
+│   ├── cache.ts           # Multi-level cache management
+│   ├── config.ts          # Configuration loader
+│   ├── gitlab.ts          # GitLab API client
+│   ├── types.ts           # TypeScript type definitions
+│   └── templates/         # Mustache templates for rendering
+├── public/                # Static assets (CSS, JS)
+├── .cache/                # Cache directory (auto-generated)
 ├── config.example.yaml
 ├── package.json
 ├── tsconfig.json

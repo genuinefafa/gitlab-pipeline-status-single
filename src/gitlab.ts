@@ -115,7 +115,27 @@ export class GitLabClient {
         }
       );
 
-      return response.data.length > 0 ? response.data[0] : null;
+      if (response.data.length === 0) {
+        return null;
+      }
+
+      const pipeline = response.data[0];
+
+      // If duration fields are missing, fetch full pipeline details
+      if (pipeline.duration === undefined || pipeline.started_at === undefined) {
+        try {
+          const detailsResponse = await this.client.get<Pipeline>(
+            `/projects/${projectId}/pipelines/${pipeline.id}`
+          );
+          return detailsResponse.data;
+        } catch (detailsError) {
+          // If details fetch fails, return what we have
+          console.error(`  ← Failed to fetch pipeline details for ${pipeline.id}`);
+          return pipeline;
+        }
+      }
+
+      return pipeline;
     } catch (error) {
       if (axios.isAxiosError(error)) {
         // 403 might mean pipelines are disabled
@@ -145,20 +165,40 @@ export class GitLabClient {
         {
           params: {
             ref: branchName,
-            per_page: count * 2, // Fetch extra to account for filtering
+            per_page: count * 3, // Fetch extra to account for filtering and potential missing durations
             order_by: 'updated_at',
             sort: 'desc',
           },
         }
       );
 
+      // Fetch full details for pipelines that are missing duration info
+      const pipelinesWithDetails = await Promise.all(
+        response.data.map(async (p) => {
+          if (p.duration === undefined || p.started_at === undefined) {
+            try {
+              const detailsResponse = await this.client.get<Pipeline>(
+                `/projects/${projectId}/pipelines/${p.id}`
+              );
+              return detailsResponse.data;
+            } catch (error) {
+              // If details fetch fails, use what we have
+              return p;
+            }
+          }
+          return p;
+        })
+      );
+
       // Filter out canceled/skipped and keep only finished pipelines with duration
-      const validPipelines = response.data
+      const validPipelines = pipelinesWithDetails
         .filter(
           (p) =>
             p.status !== 'canceled' &&
             p.status !== 'skipped' &&
             p.duration !== null &&
+            p.duration !== undefined &&
+            !isNaN(p.duration) &&
             p.duration > 0
         )
         .slice(0, count); // Take only the requested count after filtering

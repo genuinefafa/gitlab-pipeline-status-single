@@ -51,8 +51,8 @@ export async function getPipelineStatistics(
  * Format duration in seconds to human-readable format
  * Examples: "2m 15s", "45s", "1h 23m 45s"
  */
-export function formatDuration(seconds: number | null): string {
-  if (seconds === null || seconds === 0) {
+export function formatDuration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || seconds === 0 || isNaN(seconds)) {
     return '0s';
   }
 
@@ -71,10 +71,12 @@ export function formatDuration(seconds: number | null): string {
 /**
  * Calculate elapsed time for a running pipeline
  */
-export function calculateElapsedTime(startedAt: string | null): number | null {
+export function calculateElapsedTime(startedAt: string | null | undefined): number | null {
   if (!startedAt) return null;
 
   const started = new Date(startedAt).getTime();
+  if (isNaN(started)) return null; // Invalid date
+
   const now = Date.now();
   return Math.floor((now - started) / 1000); // Convert to seconds
 }
@@ -90,13 +92,13 @@ export function formatPipelineDuration(
 ): string {
   if (pipeline.status === 'running') {
     const elapsed = calculateElapsedTime(pipeline.started_at);
-    const elapsedStr = elapsed !== null ? formatDuration(elapsed) : '0s';
-    const estimatedStr = estimatedDuration !== null ? `~${formatDuration(estimatedDuration)}` : '?';
+    const elapsedStr = elapsed !== null && elapsed > 0 ? formatDuration(elapsed) : '?';
+    const estimatedStr = estimatedDuration !== null && estimatedDuration > 0 ? `~${formatDuration(estimatedDuration)}` : '?';
     return `${elapsedStr} / ${estimatedStr}`;
   }
 
   // For completed pipelines, show actual duration
-  if (pipeline.duration !== null) {
+  if (pipeline.duration !== null && pipeline.duration !== undefined && !isNaN(pipeline.duration)) {
     return formatDuration(pipeline.duration);
   }
 

@@ -261,6 +261,14 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
     }
     
     // Render template
+    const durationText = pipeline ? formatPipelineDuration(pipeline, estimatedDuration) : '-';
+    const hasDuration = pipeline && (
+      // Has valid duration
+      (pipeline.duration !== null && pipeline.duration !== undefined && !isNaN(pipeline.duration) && pipeline.duration > 0) ||
+      // Is running and has started_at
+      (pipeline.status === 'running' && pipeline.started_at !== null && pipeline.started_at !== undefined)
+    );
+
     const html = renderTemplate(templateName, {
       projectPath,
       branchName,
@@ -270,8 +278,8 @@ router.get(/^\/branches\/(.+)$/, async (req: Request, res: Response) => {
       pipeline: pipeline ? {
         ...pipeline,
         statusText: formatStatus(pipeline.status),
-        durationText: formatPipelineDuration(pipeline, estimatedDuration),
-        hasDuration: pipeline.duration !== null || pipeline.status === 'running',
+        durationText,
+        hasDuration,
       } : undefined,
       hasJobs: pipeline?.jobs && pipeline.jobs.length > 0,
       stages,

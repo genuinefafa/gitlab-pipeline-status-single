@@ -319,6 +319,10 @@ function PipelineDetails({ pipeline }) {
 function Branch({ branchKey, branchData, pipeline, isDeleted }) {
   const status = pipeline ? pipeline.status : 'none';
   const mr = branchData.mergeRequest;
+  // Detectar si el pipeline es de un commit diferente al actual del branch
+  const pipelineSha = pipeline?.sha ? pipeline.sha.substring(0, 8) : null;
+  const branchSha = branchData.commitShortId;
+  const isDesynced = pipelineSha && branchSha && pipelineSha !== branchSha;
   const detailsRef = useRef(null);
   const wasExpanded = getExpandedBranches().includes(branchKey);
 
@@ -351,7 +355,8 @@ function Branch({ branchKey, branchData, pipeline, isDeleted }) {
           </a>
         `}
         <span class="commit-info">
-          ${branchData.commitShortId ? html`<span>${branchData.commitShortId}</span>` : ''}
+          ${branchSha ? html`<span>${branchSha}</span>` : ''}
+          ${isDesynced ? html`<span class="desync-indicator" title="Pipeline en commit ${pipelineSha}, branch en ${branchSha}">⚡${pipelineSha}</span>` : ''}
           ${branchData.committedDate ? html` <span>${timeAgo(branchData.committedDate)}</span>` : ''}
           ${branchData.commitTitle && !mr ? html` ${branchData.commitTitle}` : ''}
         </span>

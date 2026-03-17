@@ -206,6 +206,17 @@ button:hover { background: var(--border); }
 /* Datos desactualizados (restaurados de localStorage, esperando datos frescos) */
 .stale { opacity: 0.45; transition: opacity 0.4s ease; }
 
+/* Pipeline en commit distinto al branch actual */
+.desync-indicator {
+  color: var(--pending-text);
+  background: var(--pending-bg);
+  border: 1px solid var(--pending-border);
+  border-radius: 4px;
+  padding: 0 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
 /* Branch borrado/mergeado */
 .branch-deleted { opacity: 0.4; }
 .branch-deleted > summary code { text-decoration: line-through; }

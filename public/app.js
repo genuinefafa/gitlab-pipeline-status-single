@@ -266,7 +266,7 @@ function PipelineDetails({ pipeline }) {
   `;
 }
 
-function Branch({ branchKey, branchData, pipeline }) {
+function Branch({ branchKey, branchData, pipeline, isDeleted }) {
   const status = pipeline ? pipeline.status : 'none';
   const mr = branchData.mergeRequest;
   const detailsRef = useRef(null);
@@ -282,7 +282,7 @@ function Branch({ branchKey, branchData, pipeline }) {
   }, [branchKey]);
 
   return html`
-    <details class="branch-row" ref=${detailsRef} onToggle=${handleToggle}>
+    <details class="branch-row ${isDeleted ? 'branch-deleted' : ''}" ref=${detailsRef} onToggle=${handleToggle}>
       <summary>
         ${mr && mr.approvedBy?.length > 0
           ? html`<span class="mr-approved">✓</span>${mr.approvedBy.map(name => html`<span class="mr-approver">${name}</span>`)}`
@@ -291,7 +291,7 @@ function Branch({ branchKey, branchData, pipeline }) {
             : null
         }
         <code>${branchData.name}</code>
-        <${StatusBadge} status=${status} />
+        ${isDeleted ? html`<mark data-status="merged">mergeado</mark>` : html`<${StatusBadge} status=${status} />`}
         ${mr && html`
           <a href=${mr.url} target="_blank" rel="noopener" class="mr-link"
              onClick=${(e) => e.stopPropagation()}
@@ -311,7 +311,7 @@ function Branch({ branchKey, branchData, pipeline }) {
   `;
 }
 
-function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, sseBranches }) {
+function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, sseBranches, deletedBranches }) {
   const [branches, setBranches] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -398,7 +398,8 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
         ${loading && html`<div class="loading-text"><span class="spinner"></span> Cargando branches...</div>`}
         ${branches && branches.map(b => {
           const key = `${project.path}/${b.name}`;
-          return html`<${Branch} key=${key} branchKey=${key} branchData=${b} pipeline=${pipelines[key]} />`;
+          const isDeleted = deletedBranches?.has(key);
+          return html`<${Branch} key=${key} branchKey=${key} branchData=${b} pipeline=${pipelines[key]} isDeleted=${isDeleted} />`;
         })}
         ${branches && branches.length === 0 && html`<div class="loading-text">No se encontraron branches</div>`}
       </div>
@@ -406,7 +407,7 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
   `;
 }
 
-function ProjectList({ servers, clientId, pipelines, onPipelinesUpdate, connected, branchesByProject }) {
+function ProjectList({ servers, clientId, pipelines, onPipelinesUpdate, connected, branchesByProject, deletedBranches }) {
   if (!servers || servers.length === 0) {
     return html`<div class="loading-text">No hay proyectos configurados</div>`;
   }
@@ -425,6 +426,7 @@ function ProjectList({ servers, clientId, pipelines, onPipelinesUpdate, connecte
               onPipelinesUpdate=${onPipelinesUpdate}
               connected=${connected}
               sseBranches=${branchesByProject[project.path]}
+              deletedBranches=${deletedBranches}
             />
           `)}
         </div>
@@ -437,6 +439,7 @@ function App() {
   const [servers, setServers] = useState([]);
   const [pipelines, setPipelines] = useState({});
   const [branchesByProject, setBranchesByProject] = useState({});
+  const [deletedBranches, setDeletedBranches] = useState(new Set());
   const [tokenStatus, setTokenStatus] = useState(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState(null);
@@ -459,14 +462,23 @@ function App() {
     } else if (type === 'branch-deleted') {
       const key = data.branch ? data.branch.replace(':', '/') : null;
       if (key) {
-        setPipelines(prev => {
-          const next = { ...prev };
-          delete next[key];
+        // Marcar como borrado, no eliminarlo — se muestra atenuado
+        setDeletedBranches(prev => new Set([...prev, key]));
+      }
+    } else if (type === 'branches-updated') {
+      // Limpiar branches borrados que ya no están en la lista nueva
+      if (data.projectPath && data.branches) {
+        const newBranchKeys = new Set(data.branches.map(b => `${data.projectPath}/${b.name}`));
+        setDeletedBranches(prev => {
+          const next = new Set(prev);
+          for (const key of prev) {
+            if (key.startsWith(data.projectPath + '/') && !newBranchKeys.has(key)) {
+              next.delete(key); // Ya no existe, se va a quitar del render
+            }
+          }
           return next;
         });
       }
-    } else if (type === 'branches-updated') {
-      // Actualizar branches de un proyecto (incluye MRs y approvals)
       if (data.projectPath && data.branches) {
         setBranchesByProject(prev => ({ ...prev, [data.projectPath]: data.branches }));
       }
@@ -560,6 +572,7 @@ function App() {
           onPipelinesUpdate=${handlePipelinesUpdate}
           connected=${connected}
           branchesByProject=${branchesByProject}
+          deletedBranches=${deletedBranches}
         />`
     }
     ${version && html`

@@ -177,6 +177,11 @@ button:hover { background: var(--border); }
 /* Datos desactualizados (restaurados de localStorage, esperando datos frescos) */
 .stale { opacity: 0.45; transition: opacity 0.4s ease; }
 
+/* Branch borrado/mergeado */
+.branch-deleted { opacity: 0.4; }
+.branch-deleted > summary code { text-decoration: line-through; }
+[data-status="merged"] { background: #e0e7ff; color: #3730a3; border: 1px solid #a5b4fc; }
+
 .branch-row > summary {
   display: flex;
   align-items: center;

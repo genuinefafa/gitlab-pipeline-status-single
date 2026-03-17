@@ -271,6 +271,7 @@ api.get('/api/status', async (c) => {
     }
 
     const includeJobs = c.req.query('includeJobs') === 'true';
+    const force = c.req.query('force') === 'true';
     const branchKeys = branchesParam.split(',').map(b => b.trim()).filter(Boolean);
     const pipelines: Record<string, any> = {};
 
@@ -293,7 +294,7 @@ api.get('/api/status', async (c) => {
         const cacheKey = `pipeline:${candidatePath}:${candidateBranch}`;
         const cached = pipelinesCache.get(cacheKey);
 
-        if (cached.data && !cached.isStale) {
+        if (!force && cached.data && !cached.isStale) {
           pipelines[branchKey] = cached.data;
           found = true;
           break;

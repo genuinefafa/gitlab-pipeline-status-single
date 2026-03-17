@@ -319,8 +319,8 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
   const [stale, setStale] = useState(false);
   const detailsRef = useRef(null);
 
-  const loadBranches = useCallback(async () => {
-    if (branches) return;
+  const loadBranches = useCallback(async (force = false) => {
+    if (branches && !force) return;
     setLoading(true);
     try {
       const data = await fetchJSON(`/api/projects/${project.path}/branches`);
@@ -328,7 +328,8 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
       setBranches(branchList);
       if (branchList.length > 0) {
         const branchKeys = branchList.map(b => `${project.path}/${b.name}`);
-        const statusData = await fetchJSON(`/api/status?branches=${branchKeys.join(',')}&includeJobs=true`);
+        const forceParam = force ? '&force=true' : '';
+        const statusData = await fetchJSON(`/api/status?branches=${branchKeys.join(',')}&includeJobs=true${forceParam}`);
         if (statusData.pipelines) onPipelinesUpdate(statusData.pipelines);
         await subscribeBranches(clientId, project.path, branchList.map(b => b.name));
       }
@@ -348,7 +349,7 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
       setStale(true); // Mostrar atenuado hasta que lleguen datos frescos
       setIsOpen(true);
       if (detailsRef.current) detailsRef.current.open = true;
-      loadBranches();
+      loadBranches(true); // force=true para saltear cache en page load
     }
   }, []);
 

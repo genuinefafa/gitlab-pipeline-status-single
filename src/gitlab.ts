@@ -1,4 +1,4 @@
-import { Project, Branch, Pipeline, ProjectConfig, GroupConfig, TokenInfo, PipelineJob } from './types.ts';
+import { Project, Branch, Pipeline, ProjectConfig, GroupConfig, TokenInfo, PipelineJob, MergeRequest } from './types.ts';
 
 export class GitLabClient {
   private apiBase: string;
@@ -118,6 +118,25 @@ export class GitLabClient {
         return [];
       }
       throw error;
+    }
+  }
+
+  /** Obtener merge requests abiertas asociadas a una rama */
+  async getMergeRequestsByBranch(projectId: number, branchName: string): Promise<MergeRequest[]> {
+    try {
+      const { data } = await this.request<MergeRequest[]>(
+        `/projects/${projectId}/merge_requests`,
+        {
+          source_branch: branchName,
+          state: 'opened',
+          per_page: 1,
+          order_by: 'updated_at',
+          sort: 'desc',
+        }
+      );
+      return data;
+    } catch {
+      return [];
     }
   }
 

@@ -145,7 +145,7 @@ function TokenStatus({ tokenStatus }) {
 function Header({ connected, tokenStatus, onRefresh }) {
   return html`
     <header class="header">
-      <h1>GitLab Pipeline Monitor</h1>
+      <h1><img src="/favicon.svg" alt="" class="app-icon" /> GitLab Pipeline Monitor</h1>
       <div class="header-actions">
         <${TokenStatus} tokenStatus=${tokenStatus} />
         <button onClick=${onRefresh}>Actualizar</button>
@@ -216,15 +216,23 @@ function PipelineDetails({ pipeline }) {
 
 function Branch({ branchData, pipeline }) {
   const status = pipeline ? pipeline.status : 'none';
+  const mr = branchData.mergeRequest;
 
   return html`
     <details class="branch-row">
       <summary>
         <code>${branchData.name}</code>
         <${StatusBadge} status=${status} />
+        ${mr && html`
+          <a href=${mr.url} target="_blank" rel="noopener" class="mr-link"
+             onClick=${(e) => e.stopPropagation()}
+             title="MR !${mr.iid} → ${mr.targetBranch}">
+            !${mr.iid} ${mr.title}
+          </a>
+        `}
         <span class="commit-info">
           ${branchData.commitShortId ? html`<span>${branchData.commitShortId}</span>` : ''}
-          ${branchData.commitTitle ? html` ${branchData.commitTitle}` : ''}
+          ${branchData.commitTitle && !mr ? html` ${branchData.commitTitle}` : ''}
         </span>
       </summary>
       ${pipeline && html`<${PipelineDetails} pipeline=${pipeline} />`}
@@ -253,7 +261,7 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate }) {
         if (branchList.length > 0) {
           // Fetch status inicial
           const branchKeys = branchList.map(b => `${project.path}/${b.name}`);
-          const statusData = await fetchJSON(`/api/status?branches=${branchKeys.join(',')}`);
+          const statusData = await fetchJSON(`/api/status?branches=${branchKeys.join(',')}&includeJobs=true`);
           if (statusData.pipelines) {
             onPipelinesUpdate(statusData.pipelines);
           }

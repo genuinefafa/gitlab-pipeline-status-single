@@ -59,6 +59,7 @@ export interface Branch {
     id: string;
     short_id: string;
     title: string;
+    committed_date: string;
   };
 }
 
@@ -103,6 +104,16 @@ export type PipelineStatus =
   | 'canceled'
   | 'skipped'
   | 'manual';
+
+export interface MergeRequest {
+  id: number;
+  iid: number;
+  title: string;
+  state: string;
+  web_url: string;
+  source_branch: string;
+  target_branch: string;
+}
 
 export interface TokenInfo {
   id: number;

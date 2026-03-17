@@ -56,6 +56,12 @@ body {
   flex-wrap: wrap;
 }
 .header h1 { font-size: 1.5rem; flex: 1; min-width: 200px; }
+.app-icon {
+  width: 1.3em;
+  height: 1.3em;
+  vertical-align: middle;
+  margin-right: 0.3rem;
+}
 .header-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 
 /* Botones */
@@ -186,6 +192,17 @@ button:hover { background: var(--border); }
   border-radius: 4px;
   border: 1px solid var(--border);
 }
+.mr-link {
+  font-size: 0.8rem;
+  color: var(--running-text);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 35%;
+}
+.mr-link:hover { text-decoration: underline; }
+
 .branch-row .commit-info {
   color: var(--text-muted);
   font-size: 0.8rem;

@@ -241,13 +241,23 @@ export class GitLabPoller {
       return;
     }
 
+    // Si hay pipeline, obtener los jobs
+    let jobs: import('./types.ts').PipelineJob[] | undefined;
+    if (pipeline) {
+      try {
+        jobs = await client.getPipelineJobs(projectId, pipeline.id);
+      } catch (error) {
+        console.error(`[Poller] Error obteniendo jobs de pipeline ${pipeline.id}:`, (error as Error).message);
+      }
+    }
+
     // Comparar con el estado anterior
     if (this.hasChanged(branchKey, pipeline)) {
       this.sseManager.pushToBranch(branchKey, {
         type: 'pipeline-update',
         data: {
           branch: branchKey,
-          pipeline,
+          pipeline: pipeline ? { ...pipeline, jobs } : null,
         },
       });
 

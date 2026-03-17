@@ -201,11 +201,38 @@ api.get('/api/projects/:projectPath{.+}/branches', async (c) => {
     const client = new GitLabClient(serverUrl!, getServerToken(serverName!));
     const branches = await client.getBranches(projectId!);
 
+    // Construir datos base de branches
     const branchData = branches.map(b => ({
       name: b.name,
       commitTitle: b.commit.title,
       commitShortId: b.commit.short_id,
+      committedDate: b.commit.committed_date,
+      mergeRequest: undefined as { iid: number; title: string; url: string; targetBranch: string } | undefined,
     }));
+
+    // Buscar MRs en paralelo para branches que no sean master/main
+    const mrPromises = branchData
+      .filter(b => b.name !== 'master' && b.name !== 'main')
+      .map(async (b) => {
+        const mrs = await client.getMergeRequestsByBranch(projectId!, b.name);
+        if (mrs.length > 0) {
+          b.mergeRequest = {
+            iid: mrs[0].iid,
+            title: mrs[0].title,
+            url: mrs[0].web_url,
+            targetBranch: mrs[0].target_branch,
+          };
+        }
+      });
+
+    await Promise.all(mrPromises);
+
+    // Ordenar: master/main primero, luego por fecha descendente
+    branchData.sort((a, b) => {
+      if (a.name === 'master' || a.name === 'main') return -1;
+      if (b.name === 'master' || b.name === 'main') return 1;
+      return new Date(b.committedDate).getTime() - new Date(a.committedDate).getTime();
+    });
 
     branchesCache.set(cacheKey, branchData);
     return c.json({ branches: branchData });
@@ -227,6 +254,7 @@ api.get('/api/status', async (c) => {
       return c.json({ error: 'Parámetro "branches" requerido' }, 400);
     }
 
+    const includeJobs = c.req.query('includeJobs') === 'true';
     const branchKeys = branchesParam.split(',').map(b => b.trim()).filter(Boolean);
     const pipelines: Record<string, any> = {};
 
@@ -263,6 +291,22 @@ api.get('/api/status', async (c) => {
           const client = new GitLabClient(match.server.url, getServerToken(match.server.name));
           const pipeline = await client.getLatestPipeline(match.project.id, candidateBranch);
 
+          let jobs: Array<{ id: number; name: string; stage: string; status: string; web_url: string }> | undefined;
+          if (pipeline && includeJobs) {
+            try {
+              const pipelineJobs = await client.getPipelineJobs(match.project.id, pipeline.id);
+              jobs = pipelineJobs.map(j => ({
+                id: j.id,
+                name: j.name,
+                stage: j.stage,
+                status: j.status,
+                web_url: j.web_url,
+              }));
+            } catch (jobError) {
+              console.error(`Error al obtener jobs para pipeline ${pipeline.id}:`, (jobError as Error).message);
+            }
+          }
+
           const result = pipeline ? {
             id: pipeline.id,
             status: pipeline.status,
@@ -274,6 +318,7 @@ api.get('/api/status', async (c) => {
             duration: pipeline.duration,
             started_at: pipeline.started_at,
             finished_at: pipeline.finished_at,
+            ...(jobs ? { jobs } : {}),
           } : null;
 
           pipelinesCache.set(cacheKey, result);

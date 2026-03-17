@@ -115,6 +115,13 @@ export interface MergeRequest {
   target_branch: string;
 }
 
+export interface MergeRequestApproval {
+  approved: boolean;
+  approved_by: Array<{ user: { name: string; username: string } }>;
+  approvals_required: number;
+  approvals_left: number;
+}
+
 export interface TokenInfo {
   id: number;
   name: string;

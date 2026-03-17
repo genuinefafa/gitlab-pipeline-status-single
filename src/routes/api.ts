@@ -207,7 +207,16 @@ api.get('/api/projects/:projectPath{.+}/branches', async (c) => {
       commitTitle: b.commit.title,
       commitShortId: b.commit.short_id,
       committedDate: b.commit.committed_date,
-      mergeRequest: undefined as { iid: number; title: string; url: string; targetBranch: string } | undefined,
+      mergeRequest: undefined as {
+        iid: number;
+        title: string;
+        url: string;
+        targetBranch: string;
+        approved: boolean;
+        approvedBy: string[];
+        approvalsRequired: number;
+        approvalsLeft: number;
+      } | undefined,
     }));
 
     // Buscar MRs en paralelo para branches que no sean master/main
@@ -216,11 +225,18 @@ api.get('/api/projects/:projectPath{.+}/branches', async (c) => {
       .map(async (b) => {
         const mrs = await client.getMergeRequestsByBranch(projectId!, b.name);
         if (mrs.length > 0) {
+          const mr = mrs[0];
+          // Buscar aprobaciones
+          const approvals = await client.getMergeRequestApprovals(projectId!, mr.iid);
           b.mergeRequest = {
-            iid: mrs[0].iid,
-            title: mrs[0].title,
-            url: mrs[0].web_url,
-            targetBranch: mrs[0].target_branch,
+            iid: mr.iid,
+            title: mr.title,
+            url: mr.web_url,
+            targetBranch: mr.target_branch,
+            approved: approvals.approved,
+            approvedBy: approvals.approved_by.map(a => a.user.name),
+            approvalsRequired: approvals.approvals_required,
+            approvalsLeft: approvals.approvals_left,
           };
         }
       });
@@ -295,6 +311,7 @@ api.get('/api/status', async (c) => {
           if (pipeline && includeJobs) {
             try {
               const pipelineJobs = await client.getPipelineJobs(match.project.id, pipeline.id);
+              pipelineJobs.reverse(); // GitLab los devuelve en orden inverso
               jobs = pipelineJobs.map(j => ({
                 id: j.id,
                 name: j.name,

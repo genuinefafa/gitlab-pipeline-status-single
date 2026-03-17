@@ -4,6 +4,20 @@ import htm from 'https://esm.sh/htm@3.1.1';
 
 const html = htm.bind(h);
 
+// --- localStorage helpers ---
+
+const STORAGE_KEY = 'glpm-expanded-projects';
+
+function getExpandedProjects() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  } catch { return []; }
+}
+
+function saveExpandedProjects(paths) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(paths));
+}
+
 // --- Utilidades ---
 
 const STATUS_ICONS = {
@@ -224,14 +238,23 @@ function Branch({ branchData, pipeline }) {
         <code>${branchData.name}</code>
         <${StatusBadge} status=${status} />
         ${mr && html`
-          <a href=${mr.url} target="_blank" rel="noopener" class="mr-link"
-             onClick=${(e) => e.stopPropagation()}
-             title="MR !${mr.iid} → ${mr.targetBranch}">
-            !${mr.iid} ${mr.title}
-          </a>
+          <span class="mr-info">
+            ${mr.approved
+              ? html`<span class="mr-approved" title="Aprobado por: ${mr.approvedBy?.join(', ')}">✓</span>`
+              : mr.approvalsLeft != null
+                ? html`<span class="mr-pending-approval" title="Faltan ${mr.approvalsLeft} aprobación(es)">${mr.approvalsLeft}/${mr.approvalsRequired}</span>`
+                : null
+            }
+            <a href=${mr.url} target="_blank" rel="noopener" class="mr-link"
+               onClick=${(e) => e.stopPropagation()}
+               title="MR !${mr.iid} → ${mr.targetBranch}">
+              !${mr.iid} ${mr.title}
+            </a>
+          </span>
         `}
         <span class="commit-info">
           ${branchData.commitShortId ? html`<span>${branchData.commitShortId}</span>` : ''}
+          ${branchData.committedDate ? html` <span>${timeAgo(branchData.committedDate)}</span>` : ''}
           ${branchData.commitTitle && !mr ? html` ${branchData.commitTitle}` : ''}
         </span>
       </summary>
@@ -245,45 +268,62 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate }) {
   const [branches, setBranches] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [autoExpanded, setAutoExpanded] = useState(false);
+  const detailsRef = useRef(null);
+
+  const loadBranches = useCallback(async () => {
+    if (branches) return;
+    setLoading(true);
+    try {
+      const data = await fetchJSON(`/api/projects/${project.path}/branches`);
+      const branchList = data.branches || [];
+      setBranches(branchList);
+      if (branchList.length > 0) {
+        const branchKeys = branchList.map(b => `${project.path}/${b.name}`);
+        const statusData = await fetchJSON(`/api/status?branches=${branchKeys.join(',')}&includeJobs=true`);
+        if (statusData.pipelines) onPipelinesUpdate(statusData.pipelines);
+        await subscribeBranches(clientId, project.path, branchList.map(b => b.name));
+      }
+    } catch (err) {
+      console.error('Error cargando branches:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [branches, clientId, project.path, onPipelinesUpdate]);
+
+  // Auto-expand si estaba guardado en localStorage
+  useEffect(() => {
+    const expanded = getExpandedProjects();
+    if (expanded.includes(project.path) && !autoExpanded) {
+      setAutoExpanded(true);
+      setIsOpen(true);
+      if (detailsRef.current) detailsRef.current.open = true;
+      loadBranches();
+    }
+  }, []);
 
   const handleToggle = useCallback(async (e) => {
     const open = e.target.open;
     setIsOpen(open);
 
-    if (open && !branches) {
-      setLoading(true);
-      try {
-        // Obtener branches
-        const data = await fetchJSON(`/api/projects/${project.path}/branches`);
-        const branchList = data.branches || [];
-        setBranches(branchList);
-
-        if (branchList.length > 0) {
-          // Fetch status inicial
-          const branchKeys = branchList.map(b => `${project.path}/${b.name}`);
-          const statusData = await fetchJSON(`/api/status?branches=${branchKeys.join(',')}&includeJobs=true`);
-          if (statusData.pipelines) {
-            onPipelinesUpdate(statusData.pipelines);
-          }
-
-          // Suscribirse a SSE
-          await subscribeBranches(clientId, project.path, branchList.map(b => b.name));
-        }
-      } catch (err) {
-        console.error('Error cargando branches:', err);
-      } finally {
-        setLoading(false);
+    const expanded = getExpandedProjects();
+    if (open) {
+      if (!expanded.includes(project.path)) {
+        saveExpandedProjects([...expanded, project.path]);
       }
-    } else if (!open && branches) {
-      // Desuscribirse
-      try {
-        await unsubscribeBranches(clientId, project.path, branches.map(b => b.name));
-      } catch (_) { /* ignorar */ }
+      await loadBranches();
+    } else {
+      saveExpandedProjects(expanded.filter(p => p !== project.path));
+      if (branches) {
+        try {
+          await unsubscribeBranches(clientId, project.path, branches.map(b => b.name));
+        } catch (_) { /* ignorar */ }
+      }
     }
-  }, [branches, clientId, project.path, onPipelinesUpdate]);
+  }, [branches, clientId, project.path, loadBranches]);
 
   return html`
-    <details class="project-card" onToggle=${handleToggle}>
+    <details class="project-card" ref=${detailsRef} onToggle=${handleToggle}>
       <summary>
         <a href=${project.url || '#'} target="_blank" rel="noopener"
            onClick=${(e) => e.stopPropagation()}>${project.name || project.path}</a>

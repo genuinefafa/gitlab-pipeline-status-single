@@ -1,4 +1,4 @@
-import { Project, Branch, Pipeline, ProjectConfig, GroupConfig, TokenInfo, PipelineJob, MergeRequest } from './types.ts';
+import { Project, Branch, Pipeline, ProjectConfig, GroupConfig, TokenInfo, PipelineJob, MergeRequest, MergeRequestApproval } from './types.ts';
 
 export class GitLabClient {
   private apiBase: string;
@@ -137,6 +137,18 @@ export class GitLabClient {
       return data;
     } catch {
       return [];
+    }
+  }
+
+  /** Obtener estado de aprobación de un merge request */
+  async getMergeRequestApprovals(projectId: number, mrIid: number): Promise<MergeRequestApproval> {
+    try {
+      const { data } = await this.request<MergeRequestApproval>(
+        `/projects/${projectId}/merge_requests/${mrIid}/approvals`
+      );
+      return data;
+    } catch {
+      return { approved: false, approved_by: [], approvals_required: 0, approvals_left: 0 };
     }
   }
 

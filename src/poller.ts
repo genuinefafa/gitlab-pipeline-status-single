@@ -245,7 +245,9 @@ export class GitLabPoller {
     let jobs: import('./types.ts').PipelineJob[] | undefined;
     if (pipeline) {
       try {
-        jobs = await client.getPipelineJobs(projectId, pipeline.id);
+        const rawJobs = await client.getPipelineJobs(projectId, pipeline.id);
+        rawJobs.reverse(); // GitLab los devuelve en orden inverso
+        jobs = rawJobs;
       } catch (error) {
         console.error(`[Poller] Error obteniendo jobs de pipeline ${pipeline.id}:`, (error as Error).message);
       }

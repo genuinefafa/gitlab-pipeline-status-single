@@ -1,6 +1,13 @@
 #!/bin/bash
 # Verificar que todos los módulos TS se parseen sin errores de sintaxis
 
+# En CI no hay config.yaml — crear uno temporal si no existe
+CREATED_CONFIG=false
+if [ ! -f config.yaml ]; then
+  cp config.example.yaml config.yaml
+  CREATED_CONFIG=true
+fi
+
 MODULES=(
   src/types.ts
   src/cache.ts
@@ -20,3 +27,11 @@ for mod in "${MODULES[@]}"; do
 done
 
 bun -e "${IMPORTS} console.log('OK: ${#MODULES[@]} módulos verificados');" 2>&1
+EXIT_CODE=$?
+
+# Limpiar config temporal
+if [ "$CREATED_CONFIG" = true ]; then
+  rm -f config.yaml
+fi
+
+exit $EXIT_CODE

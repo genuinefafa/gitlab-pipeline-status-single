@@ -170,7 +170,7 @@ function StatusBadge({ status }) {
  * - todos manual/skipped y ninguno corrió → manual
  * - mezcla → pending
  */
-function MasterStages({ pipeline }) {
+function MasterStages({ pipeline, onClick }) {
   if (!pipeline?.jobs?.length) return null;
 
   // Agrupar jobs por stage
@@ -194,7 +194,7 @@ function MasterStages({ pipeline }) {
   }
 
   return html`
-    <span class="master-stages">
+    <span class="master-stages" onClick=${onClick} style=${onClick ? 'cursor: pointer' : ''}>
       ${[...stageMap.entries()].map(([stage, jobs]) => {
         const agg = aggregateStatus(jobs);
         const icon = agg === 'success' ? '\u2713'
@@ -332,7 +332,7 @@ function Branch({ branchKey, branchData, pipeline, isDeleted }) {
   }, [branchKey]);
 
   return html`
-    <details class="branch-row ${isDeleted ? 'branch-deleted' : ''}" ref=${detailsRef} onToggle=${handleToggle}>
+    <details class="branch-row ${isDeleted ? 'branch-deleted' : ''}" ref=${detailsRef} onToggle=${handleToggle} data-branch-key=${branchKey}>
       <summary>
         ${mr && mr.approvedBy?.length > 0
           ? html`<span class="mr-approved">✓</span>${mr.approvedBy.map(name => html`<span class="mr-approver">${name}</span>`)}`
@@ -342,6 +342,7 @@ function Branch({ branchKey, branchData, pipeline, isDeleted }) {
         }
         <code>${branchData.name}</code>
         ${isDeleted ? html`<mark data-status="merged">mergeado</mark>` : html`<${StatusBadge} status=${status} />`}
+        <${MasterStages} pipeline=${pipeline} />
         ${mr && html`
           <a href=${mr.url} target="_blank" rel="noopener" class="mr-link"
              onClick=${(e) => e.stopPropagation()}
@@ -442,13 +443,35 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
   const masterKey = `${project.path}/master`;
   const mainKey = `${project.path}/main`;
   const masterPipeline = pipelines[masterKey] || pipelines[mainKey];
+  const masterBranchKey = masterKey; // asumimos master, no main
+
+  const handleExpandMaster = useCallback(async (e) => {
+    e.stopPropagation();
+    // 1. Expandir proyecto si no lo está
+    if (detailsRef.current && !detailsRef.current.open) {
+      detailsRef.current.open = true;
+      const expanded = getExpandedProjects();
+      if (!expanded.includes(project.path)) {
+        saveExpandedProjects([...expanded, project.path]);
+      }
+      setIsOpen(true);
+      await loadBranches();
+    }
+    // 2. Expandir branch master
+    addExpandedBranch(masterBranchKey);
+    // Buscar el <details> de master en el DOM y abrirlo
+    setTimeout(() => {
+      const masterDetails = detailsRef.current?.querySelector(`[data-branch-key="${masterBranchKey}"]`);
+      if (masterDetails) masterDetails.open = true;
+    }, 100);
+  }, [project.path, masterBranchKey, loadBranches]);
 
   return html`
     <details class="project-card" ref=${detailsRef} onToggle=${handleToggle}>
       <summary>
         <a href=${project.url || '#'} target="_blank" rel="noopener"
            onClick=${(e) => e.stopPropagation()}>${project.name || project.path}</a>
-        <${MasterStages} pipeline=${masterPipeline} />
+        <${MasterStages} pipeline=${masterPipeline} onClick=${handleExpandMaster} />
       </summary>
       <div class="project-content ${stale ? 'stale' : ''}">
         ${loading && html`<div class="loading-text"><span class="spinner"></span> Cargando branches...</div>`}

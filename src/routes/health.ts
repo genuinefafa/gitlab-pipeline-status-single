@@ -28,4 +28,16 @@ health.get('/api/token-status', async (c) => {
   }
 });
 
+/**
+ * GET /api/version
+ * Info de versión. En dev devuelve placeholders, en Docker se inyecta al build.
+ */
+health.get('/api/version', (c) => {
+  return c.json({
+    version: process.env.APP_VERSION || 'dev',
+    commit: process.env.APP_COMMIT || 'local',
+    buildDate: process.env.APP_BUILD_DATE || new Date().toISOString(),
+  });
+});
+
 export default health;

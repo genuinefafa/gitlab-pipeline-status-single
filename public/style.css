@@ -359,6 +359,21 @@ button:hover { background: var(--border); }
   font-size: 0.85rem;
 }
 
+/* Footer */
+.app-footer {
+  text-align: center;
+  padding: 1.5rem 0 1rem;
+  margin-top: 2rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+.app-footer a { color: var(--text-muted); }
+.app-footer a:hover { color: var(--text); }
+
 /* About page */
 .about-container {
   max-width: 600px;

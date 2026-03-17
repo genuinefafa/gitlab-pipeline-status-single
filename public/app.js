@@ -46,6 +46,16 @@ function statusLabel(status) {
   return labels[status] || status || 'sin pipeline';
 }
 
+function formatDuration(seconds) {
+  if (!seconds || seconds <= 0) return '';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m === 0) return `${s}s`;
+  if (m < 60) return `${m}m ${s}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
 function timeAgo(dateStr) {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -228,8 +238,9 @@ function PipelineDetails({ pipeline }) {
       `}
       <div class="pipeline-meta">
         ${pipeline.web_url && html`<a href=${pipeline.web_url} target="_blank" rel="noopener">Pipeline #${pipeline.id}</a>`}
-        ${pipeline.created_at && html`<span>Creado ${timeAgo(pipeline.created_at)}</span>`}
-        ${pipeline.updated_at && html`<span>Actualizado ${timeAgo(pipeline.updated_at)}</span>`}
+        ${pipeline.duration > 0 && html`<span>${formatDuration(pipeline.duration)}</span>`}
+        ${pipeline.finished_at && html`<span>Terminó ${timeAgo(pipeline.finished_at)}</span>`}
+        ${!pipeline.finished_at && pipeline.started_at && html`<span>Inició ${timeAgo(pipeline.started_at)}</span>`}
       </div>
     </div>
   `;
@@ -394,6 +405,7 @@ function App() {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [version, setVersion] = useState(null);
 
   const clientIdRef = useRef(crypto.randomUUID());
   const esRef = useRef(null);
@@ -460,6 +472,7 @@ function App() {
     const init = async () => {
       await fetchProjects();
       await fetchTokenStatus();
+      fetchJSON('/api/version').then(setVersion).catch(() => {});
       setLoading(false);
     };
     init();
@@ -513,6 +526,12 @@ function App() {
           branchesByProject=${branchesByProject}
         />`
     }
+    ${version && html`
+      <footer class="app-footer">
+        v${version.version} ${version.commit !== 'local' ? html`(${version.commit})` : ''}
+        <a href="/about">Acerca de</a>
+      </footer>
+    `}
   `;
 }
 

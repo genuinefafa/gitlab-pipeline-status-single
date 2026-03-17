@@ -285,6 +285,7 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [autoExpanded, setAutoExpanded] = useState(false);
+  const [stale, setStale] = useState(false);
   const detailsRef = useRef(null);
 
   const loadBranches = useCallback(async () => {
@@ -300,6 +301,7 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
         if (statusData.pipelines) onPipelinesUpdate(statusData.pipelines);
         await subscribeBranches(clientId, project.path, branchList.map(b => b.name));
       }
+      setStale(false);
     } catch (err) {
       console.error('Error cargando branches:', err);
     } finally {
@@ -312,6 +314,7 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
     const expanded = getExpandedProjects();
     if (expanded.includes(project.path) && !autoExpanded) {
       setAutoExpanded(true);
+      setStale(true); // Mostrar atenuado hasta que lleguen datos frescos
       setIsOpen(true);
       if (detailsRef.current) detailsRef.current.open = true;
       loadBranches();
@@ -329,6 +332,7 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
   useEffect(() => {
     if (sseBranches && isOpen) {
       setBranches(sseBranches);
+      setStale(false);
     }
   }, [sseBranches]);
 
@@ -358,7 +362,7 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
         <a href=${project.url || '#'} target="_blank" rel="noopener"
            onClick=${(e) => e.stopPropagation()}>${project.name || project.path}</a>
       </summary>
-      <div class="project-content">
+      <div class="project-content ${stale ? 'stale' : ''}">
         ${loading && html`<div class="loading-text"><span class="spinner"></span> Cargando branches...</div>`}
         ${branches && branches.map(b => {
           const key = `${project.path}/${b.name}`;

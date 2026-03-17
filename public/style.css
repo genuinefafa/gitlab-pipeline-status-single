@@ -173,6 +173,10 @@ button:hover { background: var(--border); }
   border-top: 1px solid var(--border);
   margin: 0;
 }
+
+/* Datos desactualizados (restaurados de localStorage, esperando datos frescos) */
+.stale { opacity: 0.45; transition: opacity 0.4s ease; }
+
 .branch-row > summary {
   display: flex;
   align-items: center;

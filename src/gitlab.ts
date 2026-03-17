@@ -72,7 +72,7 @@ export class GitLabClient {
         {
           ref: branchName,
           per_page: 1,
-          order_by: 'updated_at',
+          order_by: 'id',
           sort: 'desc',
         }
       );

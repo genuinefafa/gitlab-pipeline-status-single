@@ -1,5 +1,5 @@
-import { GitLabServer, GitLabToken, TokenInfo, TokenHealthStatus } from './types';
-import { GitLabClient } from './gitlab';
+import { GitLabServer, GitLabToken, TokenInfo, TokenHealthStatus } from './types.ts';
+import { GitLabClient } from './gitlab.ts';
 
 interface TokenWithHealth {
   token: GitLabToken;

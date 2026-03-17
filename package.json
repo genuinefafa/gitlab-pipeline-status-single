@@ -1,46 +1,17 @@
 {
   "name": "gitlab-pipeline-status",
-  "version": "1.0.0",
-  "description": "GitLab pipeline status monitor with tree view",
-  "main": "dist/api-server.js",
+  "version": "2.0.0",
+  "type": "module",
   "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
-    "lint": "npm run typecheck",
-    "prestart": "npm run build",
-    "start": "node dist/api-server.js",
-    "dev": "npx tsx src/api-server.ts",
-    "watch": "tsc -w",
-    "token-status": "npx tsx src/debug-token-status.ts"
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts"
   },
-  "keywords": [
-    "gitlab",
-    "pipeline",
-    "monitoring",
-    "ci/cd"
-  ],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
-    "@types/express": "^4.17.25",
-    "@types/mustache": "^4.2.6",
-    "axios": "^1.6.0",
-    "express": "^4.21.2",
-    "js-yaml": "^4.1.0",
-    "mustache": "^4.2.0"
+    "hono": "^4.7.0",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^20.10.0",
-    "ts-node": "^10.9.1",
-    "tsx": "^4.20.6",
-    "typescript": "^5.3.2"
-  },
-  "removedDependencies": {
-    "concurrently": "Removed - no longer using multiple concurrent servers",
-    "vite": "Removed - simplified to single Express server (see vite.config.ts comments)",
-    "blessed": "Removed - deprecated terminal UI (ui.ts) removed in favor of web interface",
-    "chalk": "Removed - only used by deprecated terminal UI",
-    "@types/blessed": "Removed - types for deprecated blessed library"
+    "bun-types": "latest"
   }
 }

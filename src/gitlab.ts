@@ -1,315 +1,168 @@
-import axios, { AxiosInstance } from 'axios';
-import { Project, Branch, Pipeline, ProjectConfig, GroupConfig, TokenInfo } from './types';
+import { Project, Branch, Pipeline, ProjectConfig, GroupConfig, TokenInfo, PipelineJob } from './types.ts';
 
 export class GitLabClient {
-  private client: AxiosInstance;
-  private baseURL: string;
-  private currentToken: string;
+  private apiBase: string;
+  private token: string;
 
   constructor(baseURL: string, token: string) {
-    this.baseURL = baseURL;
-    this.currentToken = token;
-    this.client = axios.create({
-      baseURL: `${baseURL}/api/v4`,
-      headers: {
-        'PRIVATE-TOKEN': token,
-      },
-      timeout: 10000,
-    });
-
-    // Add request interceptor for logging
-    this.client.interceptors.request.use((config) => {
-      const url = `${config.baseURL}${config.url}`;
-      console.log(`  → ${config.method?.toUpperCase()} ${url}`);
-      return config;
-    });
-
-    // Add response interceptor for logging
-    this.client.interceptors.response.use(
-      (response) => {
-        console.log(`  ← ${response.status} ${response.statusText} (${response.data?.length || 'N/A'} items)`);
-        return response;
-      },
-      (error) => {
-        if (axios.isAxiosError(error)) {
-          console.error(`  ← ${error.response?.status || 'ERR'} ${error.response?.statusText || error.message}`);
-        }
-        return Promise.reject(error);
-      }
-    );
+    this.apiBase = `${baseURL}/api/v4`;
+    this.token = token;
   }
 
-  /**
-   * Update the token used by this client
-   */
+  /** Actualizar el token del cliente */
   setToken(token: string): void {
-    this.currentToken = token;
-    this.client.defaults.headers['PRIVATE-TOKEN'] = token;
+    this.token = token;
   }
 
-  /**
-   * Get current token information from GitLab
-   */
-  async getTokenInfo(): Promise<TokenInfo> {
-    try {
-      const response = await this.client.get<TokenInfo>('/personal_access_tokens/self');
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(
-          `Failed to fetch token info: ${error.response?.status} ${error.response?.statusText}`
-        );
+  /** Hacer un request autenticado a la API de GitLab */
+  private async request<T>(path: string, params?: Record<string, string | number | boolean>): Promise<{ data: T; headers: Headers }> {
+    const url = new URL(`${this.apiBase}${path}`);
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        url.searchParams.set(key, String(value));
       }
-      throw error;
     }
-  }
 
-  async getProject(config: ProjectConfig): Promise<Project> {
-    try {
-      const endpoint = config.id
-        ? `/projects/${config.id}`
-        : `/projects/${encodeURIComponent(config.path!)}`;
+    const response = await fetch(url.toString(), {
+      headers: { 'PRIVATE-TOKEN': this.token },
+      signal: AbortSignal.timeout(10000),
+    });
 
-      const response = await this.client.get<Project>(endpoint);
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(
-          `Failed to fetch project: ${error.response?.status} ${error.response?.statusText}`
-        );
-      }
-      throw error;
-    }
-  }
-
-  async getBranches(projectId: number): Promise<Branch[]> {
-    try {
-      const response = await this.client.get<Branch[]>(
-        `/projects/${projectId}/repository/branches`
+    if (!response.ok) {
+      const statusText = response.statusText || `HTTP ${response.status}`;
+      throw new GitLabApiError(
+        `GitLab API error: ${response.status} ${statusText} - ${path}`,
+        response.status
       );
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(
-          `Failed to fetch branches: ${error.response?.status} ${error.response?.statusText}`
-        );
-      }
-      throw error;
     }
+
+    const data = await response.json() as T;
+    return { data, headers: response.headers };
   }
 
-  async getLatestPipeline(
-    projectId: number,
-    branchName: string
-  ): Promise<Pipeline | null> {
+  /** Información del token actual */
+  async getTokenInfo(): Promise<TokenInfo> {
+    const { data } = await this.request<TokenInfo>('/personal_access_tokens/self');
+    return data;
+  }
+
+  /** Obtener un proyecto por config (id o path) */
+  async getProject(config: ProjectConfig): Promise<Project> {
+    const endpoint = config.id
+      ? `/projects/${config.id}`
+      : `/projects/${encodeURIComponent(config.path!)}`;
+
+    const { data } = await this.request<Project>(endpoint);
+    return data;
+  }
+
+  /** Obtener ramas de un proyecto */
+  async getBranches(projectId: number): Promise<Branch[]> {
+    const { data } = await this.request<Branch[]>(
+      `/projects/${projectId}/repository/branches`
+    );
+    return data;
+  }
+
+  /** Obtener el último pipeline de una rama */
+  async getLatestPipeline(projectId: number, branchName: string): Promise<Pipeline | null> {
     try {
-      const response = await this.client.get<Pipeline[]>(
+      const { data: pipelines } = await this.request<Pipeline[]>(
         `/projects/${projectId}/pipelines`,
         {
-          params: {
-            ref: branchName,
-            per_page: 1,
-            order_by: 'updated_at',
-            sort: 'desc',
-          },
+          ref: branchName,
+          per_page: 1,
+          order_by: 'updated_at',
+          sort: 'desc',
         }
       );
 
-      if (response.data.length === 0) {
+      if (pipelines.length === 0) {
         return null;
       }
 
-      const pipeline = response.data[0];
+      const pipeline = pipelines[0];
 
-      // If duration fields are missing, fetch full pipeline details
+      // Si faltan campos de duración, buscar detalles completos
       if (pipeline.duration === undefined || pipeline.started_at === undefined) {
         try {
-          const detailsResponse = await this.client.get<Pipeline>(
+          const { data: details } = await this.request<Pipeline>(
             `/projects/${projectId}/pipelines/${pipeline.id}`
           );
-          return detailsResponse.data;
-        } catch (detailsError) {
-          // If details fetch fails, return what we have
-          console.error(`  ← Failed to fetch pipeline details for ${pipeline.id}`);
+          return details;
+        } catch {
+          // Si falla el detalle, devolver lo que tenemos
           return pipeline;
         }
       }
 
       return pipeline;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        // 403 might mean pipelines are disabled
-        if (error.response?.status === 403) {
-          return null;
-        }
-        throw new Error(
-          `Failed to fetch pipeline: ${error.response?.status} ${error.response?.statusText}`
-        );
+      // 403 puede significar que pipelines están deshabilitados
+      if (error instanceof GitLabApiError && error.status === 403) {
+        return null;
       }
       throw error;
     }
   }
 
-  /**
-   * Get last N pipelines for a branch (for statistics/estimation)
-   * Excludes canceled and skipped pipelines as they don't represent normal execution time
-   */
-  async getRecentPipelines(
-    projectId: number,
-    branchName: string,
-    count: number = 10
-  ): Promise<Pipeline[]> {
+  /** Obtener jobs de un pipeline */
+  async getPipelineJobs(projectId: number, pipelineId: number): Promise<PipelineJob[]> {
     try {
-      const response = await this.client.get<Pipeline[]>(
-        `/projects/${projectId}/pipelines`,
-        {
-          params: {
-            ref: branchName,
-            per_page: count * 3, // Fetch extra to account for filtering and potential missing durations
-            order_by: 'updated_at',
-            sort: 'desc',
-          },
-        }
-      );
-
-      // Fetch full details for pipelines that are missing duration info
-      const pipelinesWithDetails = await Promise.all(
-        response.data.map(async (p) => {
-          if (p.duration === undefined || p.started_at === undefined) {
-            try {
-              const detailsResponse = await this.client.get<Pipeline>(
-                `/projects/${projectId}/pipelines/${p.id}`
-              );
-              return detailsResponse.data;
-            } catch (error) {
-              // If details fetch fails, use what we have
-              return p;
-            }
-          }
-          return p;
-        })
-      );
-
-      // Filter out canceled/skipped and keep only finished pipelines with duration
-      const validPipelines = pipelinesWithDetails
-        .filter(
-          (p) =>
-            p.status !== 'canceled' &&
-            p.status !== 'skipped' &&
-            p.duration !== null &&
-            p.duration !== undefined &&
-            !isNaN(p.duration) &&
-            p.duration > 0
-        )
-        .slice(0, count); // Take only the requested count after filtering
-
-      return validPipelines;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 403) {
-          return [];
-        }
-        throw new Error(
-          `Failed to fetch recent pipelines: ${error.response?.status} ${error.response?.statusText}`
-        );
-      }
-      throw error;
-    }
-  }
-
-  async getPipelineJobs(projectId: number, pipelineId: number) {
-    try {
-      const response = await this.client.get(
+      const { data } = await this.request<PipelineJob[]>(
         `/projects/${projectId}/pipelines/${pipelineId}/jobs`
       );
-      return response.data;
+      return data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 403) {
-          return [];
-        }
-        throw new Error(
-          `Failed to fetch pipeline jobs: ${error.response?.status} ${error.response?.statusText}`
-        );
+      if (error instanceof GitLabApiError && error.status === 403) {
+        return [];
       }
       throw error;
     }
   }
 
+  /** Obtener todos los proyectos de un grupo, con paginación */
   async getGroupProjects(config: GroupConfig): Promise<Project[]> {
-    try {
-      const endpoint = config.id
-        ? `/groups/${config.id}/projects`
-        : `/groups/${encodeURIComponent(config.path!)}/projects`;
+    const endpoint = config.id
+      ? `/groups/${config.id}/projects`
+      : `/groups/${encodeURIComponent(config.path!)}/projects`;
 
-      const params: any = {
-        per_page: 100,
-        simple: false,
-        order_by: 'name',
-        sort: 'asc',
-      };
-
-      if (config.includeSubgroups) {
-        params.include_subgroups = true;
-      }
-
-      // GitLab API may paginate results, fetch all pages
-      const allProjects: Project[] = [];
-      let page = 1;
-      let hasMorePages = true;
-
-      while (hasMorePages) {
-        const response = await this.client.get<Project[]>(endpoint, {
-          params: { ...params, page },
-        });
-
-        allProjects.push(...response.data);
-
-        // Check if there are more pages
-        const totalPages = response.headers['x-total-pages'];
-        hasMorePages = totalPages && page < parseInt(totalPages, 10);
-        page++;
-      }
-
-      return allProjects;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(
-          `Failed to fetch group projects: ${error.response?.status} ${error.response?.statusText}`
-        );
-      }
-      throw error;
-    }
-  }
-
-  async getProjectPipelineData(config: ProjectConfig) {
-    const project = await this.getProject(config);
-    const branches = await this.getBranches(project.id);
-
-    const branchesWithPipelines = await Promise.all(
-      branches.map(async (branch) => {
-        try {
-          const pipeline = await this.getLatestPipeline(project.id, branch.name);
-          return {
-            name: branch.name,
-            commitTitle: branch.commit.title,
-            commitShortId: branch.commit.short_id,
-            pipeline: pipeline || undefined,
-          };
-        } catch (error) {
-          return {
-            name: branch.name,
-            commitTitle: branch.commit.title,
-            commitShortId: branch.commit.short_id,
-            error: (error as Error).message,
-          };
-        }
-      })
-    );
-
-    return {
-      project,
-      branches: branchesWithPipelines,
+    const baseParams: Record<string, string | number | boolean> = {
+      per_page: 100,
+      simple: false,
+      order_by: 'name',
+      sort: 'asc',
     };
+
+    if (config.includeSubgroups) {
+      baseParams.include_subgroups = true;
+    }
+
+    const allProjects: Project[] = [];
+    let page = 1;
+    let hasMorePages = true;
+
+    while (hasMorePages) {
+      const { data, headers } = await this.request<Project[]>(endpoint, {
+        ...baseParams,
+        page,
+      });
+
+      allProjects.push(...data);
+
+      const totalPages = headers.get('x-total-pages');
+      hasMorePages = !!totalPages && page < parseInt(totalPages, 10);
+      page++;
+    }
+
+    return allProjects;
+  }
+}
+
+/** Error específico de la API de GitLab con status code */
+export class GitLabApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+    this.name = 'GitLabApiError';
   }
 }

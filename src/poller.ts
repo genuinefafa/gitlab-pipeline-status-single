@@ -362,24 +362,25 @@ export class GitLabPoller {
       }
     }
 
-    // Comparar con el estado anterior
-    if (this.hasChanged(branchKey, pipeline)) {
-      this.sseManager.pushToBranch(branchKey, {
-        type: 'pipeline-update',
-        data: {
-          branch: branchKey,
-          pipeline: pipeline ? { ...pipeline, jobs } : null,
-        },
-      });
+    // Siempre pushear el estado actual — Preact se encarga de no re-renderizar si no cambió.
+    // Esto garantiza que cambios en jobs individuales (ej: job pasa de running a success)
+    // se reflejen aunque el pipeline-level status no haya cambiado.
+    this.sseManager.pushToBranch(branchKey, {
+      type: 'pipeline-update',
+      data: {
+        branch: branchKey,
+        pipeline: pipeline ? { ...pipeline, jobs } : null,
+      },
+    });
 
-      // Actualizar lastStatus
-      if (pipeline) {
-        this.lastStatus.set(branchKey, {
-          status: pipeline.status,
-          pipelineId: pipeline.id,
-        });
-      } else {
-        this.lastStatus.delete(branchKey);
+    // Actualizar lastStatus
+    if (pipeline) {
+      this.lastStatus.set(branchKey, {
+        status: pipeline.status,
+        pipelineId: pipeline.id,
+      });
+    } else {
+      this.lastStatus.delete(branchKey);
       }
     }
   }

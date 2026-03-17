@@ -81,6 +81,13 @@ function connectSSE(clientId, onEvent, onStatusChange) {
     } catch (_) { /* ignorar */ }
   });
 
+  es.addEventListener('branches-updated', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      onEvent('branches-updated', data);
+    } catch (_) { /* ignorar */ }
+  });
+
   es.onerror = () => {
     onStatusChange(false);
     es.close();
@@ -235,22 +242,20 @@ function Branch({ branchData, pipeline }) {
   return html`
     <details class="branch-row">
       <summary>
+        ${mr && mr.approvedBy?.length > 0
+          ? html`<span class="mr-approved">✓</span>${mr.approvedBy.map(name => html`<span class="mr-approver">${name}</span>`)}`
+          : mr && mr.approvalsLeft > 0
+            ? html`<span class="mr-pending-approval">${mr.approvalsLeft}/${mr.approvalsRequired}</span>`
+            : null
+        }
         <code>${branchData.name}</code>
         <${StatusBadge} status=${status} />
         ${mr && html`
-          <span class="mr-info">
-            ${mr.approved
-              ? html`<span class="mr-approved" title="Aprobado por: ${mr.approvedBy?.join(', ')}">✓</span>`
-              : mr.approvalsLeft != null
-                ? html`<span class="mr-pending-approval" title="Faltan ${mr.approvalsLeft} aprobación(es)">${mr.approvalsLeft}/${mr.approvalsRequired}</span>`
-                : null
-            }
-            <a href=${mr.url} target="_blank" rel="noopener" class="mr-link"
-               onClick=${(e) => e.stopPropagation()}
-               title="MR !${mr.iid} → ${mr.targetBranch}">
-              !${mr.iid} ${mr.title}
-            </a>
-          </span>
+          <a href=${mr.url} target="_blank" rel="noopener" class="mr-link"
+             onClick=${(e) => e.stopPropagation()}
+             title="MR !${mr.iid} → ${mr.targetBranch}">
+            !${mr.iid} ${mr.title}
+          </a>
         `}
         <span class="commit-info">
           ${branchData.commitShortId ? html`<span>${branchData.commitShortId}</span>` : ''}
@@ -264,7 +269,7 @@ function Branch({ branchData, pipeline }) {
   `;
 }
 
-function Project({ project, clientId, pipelines, onPipelinesUpdate }) {
+function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, sseBranches }) {
   const [branches, setBranches] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -301,6 +306,20 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate }) {
       loadBranches();
     }
   }, []);
+
+  // Resuscribir al reconectar SSE (después de volver del background)
+  useEffect(() => {
+    if (connected && isOpen && branches?.length > 0) {
+      subscribeBranches(clientId, project.path, branches.map(b => b.name)).catch(() => {});
+    }
+  }, [connected]);
+
+  // Actualizar branches cuando llegan por SSE (refresh periódico del poller)
+  useEffect(() => {
+    if (sseBranches && isOpen) {
+      setBranches(sseBranches);
+    }
+  }, [sseBranches]);
 
   const handleToggle = useCallback(async (e) => {
     const open = e.target.open;
@@ -340,7 +359,7 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate }) {
   `;
 }
 
-function ProjectList({ servers, clientId, pipelines, onPipelinesUpdate }) {
+function ProjectList({ servers, clientId, pipelines, onPipelinesUpdate, connected, branchesByProject }) {
   if (!servers || servers.length === 0) {
     return html`<div class="loading-text">No hay proyectos configurados</div>`;
   }
@@ -357,6 +376,8 @@ function ProjectList({ servers, clientId, pipelines, onPipelinesUpdate }) {
               clientId=${clientId}
               pipelines=${pipelines}
               onPipelinesUpdate=${onPipelinesUpdate}
+              connected=${connected}
+              sseBranches=${branchesByProject[project.path]}
             />
           `)}
         </div>
@@ -368,6 +389,7 @@ function ProjectList({ servers, clientId, pipelines, onPipelinesUpdate }) {
 function App() {
   const [servers, setServers] = useState([]);
   const [pipelines, setPipelines] = useState({});
+  const [branchesByProject, setBranchesByProject] = useState({});
   const [tokenStatus, setTokenStatus] = useState(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState(null);
@@ -382,7 +404,6 @@ function App() {
 
   const handleSSEEvent = useCallback((type, data) => {
     if (type === 'pipeline-update') {
-      // data.branch viene como "grupo/mi-app:main", convertir a "grupo/mi-app/main"
       const key = data.branch ? data.branch.replace(':', '/') : null;
       if (key && data.pipeline) {
         setPipelines(prev => ({ ...prev, [key]: data.pipeline }));
@@ -395,6 +416,11 @@ function App() {
           delete next[key];
           return next;
         });
+      }
+    } else if (type === 'branches-updated') {
+      // Actualizar branches de un proyecto (incluye MRs y approvals)
+      if (data.projectPath && data.branches) {
+        setBranchesByProject(prev => ({ ...prev, [data.projectPath]: data.branches }));
       }
     }
   }, []);
@@ -423,6 +449,12 @@ function App() {
     setLoading(false);
   }, [fetchProjects, fetchTokenStatus]);
 
+  // Conectar SSE y resuscribir proyectos abiertos
+  const connectAndSubscribe = useCallback(() => {
+    if (esRef.current) { try { esRef.current.close(); } catch(_) {} }
+    esRef.current = connectSSE(clientIdRef.current, handleSSEEvent, setConnected);
+  }, [handleSSEEvent]);
+
   // Inicializacion
   useEffect(() => {
     const init = async () => {
@@ -431,16 +463,35 @@ function App() {
       setLoading(false);
     };
     init();
-
-    // Conectar SSE
-    esRef.current = connectSSE(clientIdRef.current, handleSSEEvent, setConnected);
+    connectAndSubscribe();
 
     // Refrescar token status cada 5 minutos
     const tokenInterval = setInterval(fetchTokenStatus, 5 * 60 * 1000);
 
+    // Pausar SSE después de 5min en background, reconectar al volver
+    let bgTimer = null;
+    const handleVisibility = () => {
+      if (document.hidden) {
+        // Esperar 5 minutos antes de desconectar
+        bgTimer = setTimeout(() => {
+          if (esRef.current) { try { esRef.current.close(); } catch(_) {} }
+          esRef.current = null;
+          setConnected(false);
+        }, 5 * 60 * 1000);
+      } else {
+        // Volvió — cancelar timer si no se disparó aún
+        if (bgTimer) { clearTimeout(bgTimer); bgTimer = null; }
+        // Si ya se había desconectado, reconectar
+        if (!esRef.current) connectAndSubscribe();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
       if (esRef.current) esRef.current.close();
+      if (bgTimer) clearTimeout(bgTimer);
       clearInterval(tokenInterval);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 
@@ -458,6 +509,8 @@ function App() {
           clientId=${clientIdRef.current}
           pipelines=${pipelines}
           onPipelinesUpdate=${handlePipelinesUpdate}
+          connected=${connected}
+          branchesByProject=${branchesByProject}
         />`
     }
   `;

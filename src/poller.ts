@@ -99,6 +99,9 @@ export class GitLabPoller {
   private _running = false;
   private lastStatus = new Map<string, LastPipelineState>();
   private pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private cycleCount = 0;
+  // Cada cuántos ciclos refrescar branches/MRs (10 × 30s = 5min)
+  private branchRefreshEvery = 10;
 
   constructor(
     private sseManager: SSEManager,
@@ -162,18 +165,123 @@ export class GitLabPoller {
     const watched = this.sseManager.getWatchedBranches();
 
     if (watched.size === 0) {
-      return; // Nada que pollear
+      return;
     }
 
-    // Cache de clientes GitLab por servidor para reutilizar conexiones
+    this.cycleCount++;
     const clientCache = new Map<string, GitLabClient>();
 
+    // Cada N ciclos, refrescar lista de branches + MRs por proyecto
+    if (this.cycleCount % this.branchRefreshEvery === 0) {
+      await this.refreshBranches(watched, clientCache);
+    }
+
+    // Siempre: pollear status de pipelines
     for (const [branchKey] of watched) {
       try {
         await this.pollBranch(branchKey, clientCache);
       } catch (error) {
-        // Loguear pero continuar con la siguiente branch
         console.error(`[Poller] Error polleando ${branchKey}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Refrescar branches y MRs de los proyectos que tienen suscriptores.
+   * Detecta branches borrados, nuevos, y cambios en aprobaciones.
+   */
+  private async refreshBranches(
+    watched: Map<string, Set<string>>,
+    clientCache: Map<string, GitLabClient>
+  ): Promise<void> {
+    // Agrupar branchKeys por proyecto
+    const projectPaths = new Set<string>();
+    for (const [branchKey] of watched) {
+      const parsed = parseBranchKey(branchKey);
+      if (parsed) projectPaths.add(parsed.projectPath);
+    }
+
+    for (const projectPath of projectPaths) {
+      try {
+        const serverInfo = resolveServer(projectPath);
+        if (!serverInfo) continue;
+
+        const projectId = resolveProjectId(projectPath);
+        if (!projectId) continue;
+
+        let client = clientCache.get(serverInfo.serverName);
+        if (!client) {
+          const token = getServerToken(serverInfo.serverName);
+          client = new GitLabClient(serverInfo.serverUrl, token);
+          clientCache.set(serverInfo.serverName, client);
+        }
+
+        // Fetch branches actuales
+        const gitlabBranches = await client.getBranches(projectId);
+        const currentBranchNames = new Set(gitlabBranches.map(b => b.name));
+
+        // Detectar branches borrados
+        for (const [branchKey] of watched) {
+          const parsed = parseBranchKey(branchKey);
+          if (!parsed || parsed.projectPath !== projectPath) continue;
+          if (!currentBranchNames.has(parsed.branchName)) {
+            console.log(`[Poller] Branch borrado: ${branchKey}`);
+            this.sseManager.pushToBranch(branchKey, {
+              type: 'branch-deleted',
+              data: { branch: branchKey },
+            });
+            this.sseManager.unsubscribeAll(branchKey);
+            this.lastStatus.delete(branchKey);
+          }
+        }
+
+        // Construir datos de branches con MRs y approvals
+        const branchData = gitlabBranches.map(b => ({
+          name: b.name,
+          commitTitle: b.commit.title,
+          commitShortId: b.commit.short_id,
+          committedDate: b.commit.committed_date,
+          mergeRequest: undefined as any,
+        }));
+
+        // Buscar MRs + approvals en paralelo
+        const mrPromises = branchData
+          .filter(b => b.name !== 'master' && b.name !== 'main')
+          .map(async (b) => {
+            const mrs = await client!.getMergeRequestsByBranch(projectId!, b.name);
+            if (mrs.length > 0) {
+              const mr = mrs[0];
+              const approvals = await client!.getMergeRequestApprovals(projectId!, mr.iid);
+              b.mergeRequest = {
+                iid: mr.iid,
+                title: mr.title,
+                url: mr.web_url,
+                targetBranch: mr.target_branch,
+                approved: approvals.approved,
+                approvedBy: approvals.approved_by.map(a => a.user.name),
+                approvalsRequired: approvals.approvals_required,
+                approvalsLeft: approvals.approvals_left,
+              };
+            }
+          });
+        await Promise.all(mrPromises);
+
+        // Ordenar: master/main primero, luego por fecha desc
+        branchData.sort((a, b) => {
+          if (a.name === 'master' || a.name === 'main') return -1;
+          if (b.name === 'master' || b.name === 'main') return 1;
+          return new Date(b.committedDate).getTime() - new Date(a.committedDate).getTime();
+        });
+
+        // Pushear actualización de branches a todos los que miran este proyecto
+        this.sseManager.broadcast({
+          type: 'branches-updated',
+          data: { projectPath, branches: branchData },
+        });
+
+        console.log(`[Poller] Branches refrescados para ${projectPath}: ${branchData.length} ramas`);
+      } catch (error) {
+        console.error(`[Poller] Error refrescando branches de ${projectPath}:`, (error as Error).message);
       }
     }
   }
@@ -233,6 +341,7 @@ export class GitLabPoller {
           type: 'branch-deleted',
           data: { branch: branchKey },
         });
+        this.sseManager.unsubscribeAll(branchKey);
         this.lastStatus.delete(branchKey);
         return;
       }

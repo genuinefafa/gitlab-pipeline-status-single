@@ -89,6 +89,15 @@ export class SSEManager {
   }
 
   /**
+   * Desuscribir una branch de TODOS los clientes (ej: branch borrado).
+   */
+  unsubscribeAll(branchKey: string): void {
+    for (const [, client] of this.clients) {
+      client.subscribedBranches.delete(branchKey);
+    }
+  }
+
+  /**
    * Obtener las branches de un cliente específico (como array).
    */
   getClientBranches(clientId: string): string[] {

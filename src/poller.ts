@@ -381,19 +381,7 @@ export class GitLabPoller {
       });
     } else {
       this.lastStatus.delete(branchKey);
-      }
     }
   }
 
-  /**
-   * Detectar si el estado de un pipeline cambió respecto a la última vez.
-   */
-  private hasChanged(branchKey: string, pipeline: Pipeline | null): boolean {
-    const prev = this.lastStatus.get(branchKey);
-
-    if (!prev && !pipeline) return false;
-    if (!prev || !pipeline) return true;
-
-    return prev.status !== pipeline.status || prev.pipelineId !== pipeline.id;
-  }
 }

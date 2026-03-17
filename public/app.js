@@ -161,6 +161,56 @@ function StatusBadge({ status }) {
   return html`<mark data-status=${s}>${icon} ${statusLabel(s)}</mark>`;
 }
 
+/**
+ * Resumen compacto de stages del pipeline de master/main.
+ * Cada stage muestra un badge con color según el estado agregado de sus jobs:
+ * - todos success → success
+ * - alguno failed → failed
+ * - alguno running → running
+ * - todos manual/skipped y ninguno corrió → manual
+ * - mezcla → pending
+ */
+function MasterStages({ pipeline }) {
+  if (!pipeline?.jobs?.length) return null;
+
+  // Agrupar jobs por stage
+  const stageMap = new Map();
+  for (const job of pipeline.jobs) {
+    const stage = job.stage || 'default';
+    if (!stageMap.has(stage)) stageMap.set(stage, []);
+    stageMap.get(stage).push(job);
+  }
+
+  function aggregateStatus(jobs) {
+    const statuses = jobs.map(j => j.status);
+    if (statuses.every(s => s === 'success')) return 'success';
+    if (statuses.some(s => s === 'failed')) return 'failed';
+    if (statuses.some(s => s === 'running')) return 'running';
+    if (statuses.some(s => s === 'pending' || s === 'created')) return 'pending';
+    if (statuses.every(s => s === 'manual' || s === 'skipped')) return 'manual';
+    // Mezcla: algunos success + algunos manual
+    if (statuses.some(s => s === 'success') && statuses.some(s => s === 'manual' || s === 'skipped')) return 'partial';
+    return 'none';
+  }
+
+  return html`
+    <span class="master-stages">
+      ${[...stageMap.entries()].map(([stage, jobs]) => {
+        const agg = aggregateStatus(jobs);
+        const icon = agg === 'success' ? '\u2713'
+          : agg === 'failed' ? '\u2717'
+          : agg === 'running' ? '\u25B6'
+          : agg === 'pending' ? '\u23F8'
+          : agg === 'manual' ? '\u2699'
+          : agg === 'partial' ? '\u25D1'
+          : '\u2014';
+        const names = jobs.map(j => `${j.name}: ${j.status}`).join('\n');
+        return html`<span class="stage-badge" data-status=${agg} title=${names}>${icon} ${stage}</span>`;
+      })}
+    </span>
+  `;
+}
+
 function TokenStatus({ tokenStatus }) {
   if (!tokenStatus) return null;
 
@@ -388,11 +438,17 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
     }
   }, [branches, clientId, project.path, loadBranches]);
 
+  // Pipeline de master/main para mostrar resumen de stages en el header
+  const masterKey = `${project.path}/master`;
+  const mainKey = `${project.path}/main`;
+  const masterPipeline = pipelines[masterKey] || pipelines[mainKey];
+
   return html`
     <details class="project-card" ref=${detailsRef} onToggle=${handleToggle}>
       <summary>
         <a href=${project.url || '#'} target="_blank" rel="noopener"
            onClick=${(e) => e.stopPropagation()}>${project.name || project.path}</a>
+        <${MasterStages} pipeline=${masterPipeline} />
       </summary>
       <div class="project-content ${stale ? 'stale' : ''}">
         ${loading && html`<div class="loading-text"><span class="spinner"></span> Cargando branches...</div>`}

@@ -166,6 +166,35 @@ button:hover { background: var(--border); }
   text-decoration: none;
 }
 .project-card > summary a:hover { text-decoration: underline; }
+
+/* Resumen de stages de master en el header del proyecto */
+.master-stages {
+  display: inline-flex;
+  gap: 0.3rem;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.stage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.stage-badge[data-status="success"] { background: var(--success-bg); color: var(--success-text); border-color: var(--success-border); }
+.stage-badge[data-status="failed"] { background: var(--failed-bg); color: var(--failed-text); border-color: var(--failed-border); }
+.stage-badge[data-status="running"] { background: var(--running-bg); color: var(--running-text); border-color: var(--running-border); animation: pulse 2s ease-in-out infinite; }
+.stage-badge[data-status="pending"] { background: var(--pending-bg); color: var(--pending-text); border-color: var(--pending-border); }
+.stage-badge[data-status="manual"] { background: var(--manual-bg); color: var(--manual-text); border-color: var(--manual-border); }
+.stage-badge[data-status="partial"] { background: #fef3c7; color: #78350f; border-color: #fbbf24; }
+.stage-badge[data-status="none"] { background: var(--none-bg); color: var(--none-text); border-color: var(--none-border); }
+
 .project-card .project-content { padding: 0.5rem 0; }
 
 /* Branch row */

@@ -7,6 +7,7 @@ const html = htm.bind(h);
 // --- localStorage helpers ---
 
 const STORAGE_KEY = 'glpm-expanded-projects';
+const STORAGE_KEY_BRANCHES = 'glpm-expanded-branches';
 
 function getExpandedProjects() {
   try {
@@ -16,6 +17,25 @@ function getExpandedProjects() {
 
 function saveExpandedProjects(paths) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(paths));
+}
+
+function getExpandedBranches() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY_BRANCHES) || '[]');
+  } catch { return []; }
+}
+
+function saveExpandedBranches(keys) {
+  localStorage.setItem(STORAGE_KEY_BRANCHES, JSON.stringify(keys));
+}
+
+function addExpandedBranch(key) {
+  const expanded = getExpandedBranches();
+  if (!expanded.includes(key)) saveExpandedBranches([...expanded, key]);
+}
+
+function removeExpandedBranch(key) {
+  saveExpandedBranches(getExpandedBranches().filter(k => k !== key));
 }
 
 // --- Utilidades ---
@@ -246,12 +266,23 @@ function PipelineDetails({ pipeline }) {
   `;
 }
 
-function Branch({ branchData, pipeline }) {
+function Branch({ branchKey, branchData, pipeline }) {
   const status = pipeline ? pipeline.status : 'none';
   const mr = branchData.mergeRequest;
+  const detailsRef = useRef(null);
+  const wasExpanded = getExpandedBranches().includes(branchKey);
+
+  useEffect(() => {
+    if (wasExpanded && detailsRef.current) detailsRef.current.open = true;
+  }, []);
+
+  const handleToggle = useCallback((e) => {
+    if (e.target.open) addExpandedBranch(branchKey);
+    else removeExpandedBranch(branchKey);
+  }, [branchKey]);
 
   return html`
-    <details class="branch-row">
+    <details class="branch-row" ref=${detailsRef} onToggle=${handleToggle}>
       <summary>
         ${mr && mr.approvedBy?.length > 0
           ? html`<span class="mr-approved">✓</span>${mr.approvedBy.map(name => html`<span class="mr-approver">${name}</span>`)}`
@@ -366,7 +397,7 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
         ${loading && html`<div class="loading-text"><span class="spinner"></span> Cargando branches...</div>`}
         ${branches && branches.map(b => {
           const key = `${project.path}/${b.name}`;
-          return html`<${Branch} key=${key} branchData=${b} pipeline=${pipelines[key]} />`;
+          return html`<${Branch} key=${key} branchKey=${key} branchData=${b} pipeline=${pipelines[key]} />`;
         })}
         ${branches && branches.length === 0 && html`<div class="loading-text">No se encontraron branches</div>`}
       </div>

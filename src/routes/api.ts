@@ -325,6 +325,12 @@ api.get('/api/status', async (c) => {
             }
           }
 
+          // Obtener título del commit del pipeline
+          let commitTitle: string | null = null;
+          if (pipeline) {
+            commitTitle = await client.getCommitTitle(match.project.id, pipeline.sha);
+          }
+
           const result = pipeline ? {
             id: pipeline.id,
             status: pipeline.status,
@@ -336,6 +342,7 @@ api.get('/api/status', async (c) => {
             duration: pipeline.duration,
             started_at: pipeline.started_at,
             finished_at: pipeline.finished_at,
+            commit_title: commitTitle,
             ...(jobs ? { jobs } : {}),
           } : null;
 

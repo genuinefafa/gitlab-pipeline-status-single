@@ -375,6 +375,22 @@ button:hover { background: var(--border); }
 }
 .pipeline-meta a { color: var(--text-muted); }
 .pipeline-meta a:hover { color: var(--text); }
+.pipeline-sha {
+  font-size: 0.7rem;
+  background: var(--bg-secondary);
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+.pipeline-commit-msg {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 0.2rem 0;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Loading spinner */
 .spinner {

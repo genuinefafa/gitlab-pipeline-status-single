@@ -362,14 +362,20 @@ export class GitLabPoller {
       }
     }
 
+    // Obtener título del commit del pipeline
+    let commitTitle: string | null = null;
+    if (pipeline) {
+      try {
+        commitTitle = await client.getCommitTitle(projectId, pipeline.sha);
+      } catch { /* no crítico */ }
+    }
+
     // Siempre pushear el estado actual — Preact se encarga de no re-renderizar si no cambió.
-    // Esto garantiza que cambios en jobs individuales (ej: job pasa de running a success)
-    // se reflejen aunque el pipeline-level status no haya cambiado.
     this.sseManager.pushToBranch(branchKey, {
       type: 'pipeline-update',
       data: {
         branch: branchKey,
-        pipeline: pipeline ? { ...pipeline, jobs } : null,
+        pipeline: pipeline ? { ...pipeline, jobs, commit_title: commitTitle } : null,
       },
     });
 

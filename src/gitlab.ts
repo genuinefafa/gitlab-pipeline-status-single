@@ -121,6 +121,16 @@ export class GitLabClient {
     }
   }
 
+  /** Obtener el título de un commit por su SHA */
+  async getCommitTitle(projectId: number, sha: string): Promise<string | null> {
+    try {
+      const { data } = await this.request<{ title: string }>(`/projects/${projectId}/repository/commits/${sha}`);
+      return data.title;
+    } catch {
+      return null;
+    }
+  }
+
   /** Obtener merge requests abiertas asociadas a una rama */
   async getMergeRequestsByBranch(projectId: number, branchName: string): Promise<MergeRequest[]> {
     try {

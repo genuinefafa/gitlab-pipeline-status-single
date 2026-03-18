@@ -308,10 +308,12 @@ function PipelineDetails({ pipeline }) {
       `}
       <div class="pipeline-meta">
         ${pipeline.web_url && html`<a href=${pipeline.web_url} target="_blank" rel="noopener">Pipeline #${pipeline.id}</a>`}
+        ${pipeline.sha && html`<code class="pipeline-sha">${pipeline.sha.substring(0, 8)}</code>`}
         ${pipeline.duration > 0 && html`<span>${formatDuration(pipeline.duration)}</span>`}
         ${pipeline.finished_at && html`<span>Terminó ${timeAgo(pipeline.finished_at)}</span>`}
         ${!pipeline.finished_at && pipeline.started_at && html`<span>Inició ${timeAgo(pipeline.started_at)}</span>`}
       </div>
+      ${pipeline.commit_title && html`<div class="pipeline-commit-msg">${pipeline.commit_title}</div>`}
     </div>
   `;
 }

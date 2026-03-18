@@ -3,6 +3,7 @@ import { config } from '../config.ts';
 import { GitLabClient } from '../gitlab.ts';
 import { TokenManager } from '../token-manager.ts';
 import { projectsCache, branchesCache, pipelinesCache } from '../cache.ts';
+import { log } from '../logger.ts';
 import type { Project, ProjectConfig, GitLabServer } from '../types.ts';
 
 const api = new Hono();
@@ -110,7 +111,7 @@ api.get('/api/projects', async (c) => {
             const project = await client.getProject(projConfig);
             allProjects.push(project);
           } catch (error) {
-            console.error(`Error al obtener proyecto ${projConfig.path || projConfig.id}:`, (error as Error).message);
+            log.error('API',`Error al obtener proyecto ${projConfig.path || projConfig.id}:`, (error as Error).message);
           }
         }
       }
@@ -122,7 +123,7 @@ api.get('/api/projects', async (c) => {
             const groupProjects = await client.getGroupProjects(groupConfig);
             allProjects.push(...groupProjects);
           } catch (error) {
-            console.error(`Error al obtener grupo ${groupConfig.path || groupConfig.id}:`, (error as Error).message);
+            log.error('API',`Error al obtener grupo ${groupConfig.path || groupConfig.id}:`, (error as Error).message);
           }
         }
       }
@@ -147,7 +148,7 @@ api.get('/api/projects', async (c) => {
 
     return c.json({ servers });
   } catch (error) {
-    console.error('Error en /api/projects:', (error as Error).message);
+    log.error('API','Error en /api/projects:', (error as Error).message);
     return c.json({ error: 'Error al obtener proyectos', message: (error as Error).message }, 500);
   }
 });
@@ -253,7 +254,7 @@ api.get('/api/projects/:projectPath{.+}/branches', async (c) => {
     branchesCache.set(cacheKey, branchData);
     return c.json({ branches: branchData });
   } catch (error) {
-    console.error('Error en /api/projects/.../branches:', (error as Error).message);
+    log.error('API','Error en /api/projects/.../branches:', (error as Error).message);
     return c.json({ error: 'Error al obtener ramas', message: (error as Error).message }, 500);
   }
 });
@@ -321,7 +322,7 @@ api.get('/api/status', async (c) => {
                 web_url: j.web_url,
               }));
             } catch (jobError) {
-              console.error(`Error al obtener jobs para pipeline ${pipeline.id}:`, (jobError as Error).message);
+              log.error('API',`Error al obtener jobs para pipeline ${pipeline.id}:`, (jobError as Error).message);
             }
           }
 
@@ -351,7 +352,7 @@ api.get('/api/status', async (c) => {
           found = true;
           break;
         } catch (error) {
-          console.error(`Error al obtener pipeline para ${branchKey}:`, (error as Error).message);
+          log.error('API',`Error al obtener pipeline para ${branchKey}:`, (error as Error).message);
           continue;
         }
       }
@@ -363,7 +364,7 @@ api.get('/api/status', async (c) => {
 
     return c.json({ pipelines });
   } catch (error) {
-    console.error('Error en /api/status:', (error as Error).message);
+    log.error('API','Error en /api/status:', (error as Error).message);
     return c.json({ error: 'Error al obtener status', message: (error as Error).message }, 500);
   }
 });

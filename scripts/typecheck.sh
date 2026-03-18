@@ -10,6 +10,7 @@ fi
 
 MODULES=(
   src/types.ts
+  src/logger.ts
   src/cache.ts
   src/config.ts
   src/gitlab.ts

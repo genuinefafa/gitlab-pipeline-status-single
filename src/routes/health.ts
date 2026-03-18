@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { log } from '../logger.ts';
 import { config } from '../config.ts';
 import { tokenManager } from './api.ts';
 
@@ -23,7 +24,7 @@ health.get('/api/token-status', async (c) => {
       servers: statuses,
     });
   } catch (error) {
-    console.error('Error en /api/token-status:', (error as Error).message);
+    log.error('Health','Error en /api/token-status:', (error as Error).message);
     return c.json({ error: 'Error al validar tokens', message: (error as Error).message }, 500);
   }
 });

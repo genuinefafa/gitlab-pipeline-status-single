@@ -11,6 +11,7 @@ import { config } from './config.ts';
 import { SSEManager } from './sse-manager.ts';
 import { projectsCache } from './cache.ts';
 import { tokenManager } from './routes/api.ts';
+import { log } from './logger.ts';
 
 interface LastPipelineState {
   status: string;
@@ -122,7 +123,7 @@ export class GitLabPoller {
   start(): void {
     if (this._running) return;
     this._running = true;
-    console.log(`[Poller] Iniciando con intervalo de ${this.intervalMs}ms`);
+    log.info('Poller', ` Iniciando con intervalo de ${this.intervalMs}ms`);
     this.loop();
   }
 
@@ -135,7 +136,7 @@ export class GitLabPoller {
       clearTimeout(this.pollTimeoutId);
       this.pollTimeoutId = null;
     }
-    console.log('[Poller] Detenido');
+    log.info('Poller', 'Detenido');
   }
 
   /**
@@ -147,7 +148,7 @@ export class GitLabPoller {
       try {
         await this.pollOnce();
       } catch (error) {
-        console.error('[Poller] Error inesperado en el loop:', error);
+        log.error('Poller', ' Error inesperado en el loop:', error);
       }
 
       // Esperar el intervalo usando Bun.sleep si está disponible, sino setTimeout
@@ -181,7 +182,7 @@ export class GitLabPoller {
       try {
         await this.pollBranch(branchKey, clientCache);
       } catch (error) {
-        console.error(`[Poller] Error polleando ${branchKey}:`, error);
+        log.error('Poller', ` Error polleando ${branchKey}:`, error);
       }
     }
   }
@@ -225,7 +226,7 @@ export class GitLabPoller {
           const parsed = parseBranchKey(branchKey);
           if (!parsed || parsed.projectPath !== projectPath) continue;
           if (!currentBranchNames.has(parsed.branchName)) {
-            console.log(`[Poller] Branch borrado: ${branchKey}`);
+            log.info('Poller', ` Branch borrado: ${branchKey}`);
             this.sseManager.pushToBranch(branchKey, {
               type: 'branch-deleted',
               data: { branch: branchKey },
@@ -279,9 +280,9 @@ export class GitLabPoller {
           data: { projectPath, branches: branchData },
         });
 
-        console.log(`[Poller] Branches refrescados para ${projectPath}: ${branchData.length} ramas`);
+        log.info('Poller', ` Branches refrescados para ${projectPath}: ${branchData.length} ramas`);
       } catch (error) {
-        console.error(`[Poller] Error refrescando branches de ${projectPath}:`, (error as Error).message);
+        log.error('Poller', ` Error refrescando branches de ${projectPath}:`, (error as Error).message);
       }
     }
   }
@@ -295,7 +296,7 @@ export class GitLabPoller {
   ): Promise<void> {
     const parsed = parseBranchKey(branchKey);
     if (!parsed) {
-      console.warn(`[Poller] branchKey inválida: ${branchKey}`);
+      log.warn('Poller', ` branchKey inválida: ${branchKey}`);
       return;
     }
 
@@ -304,7 +305,7 @@ export class GitLabPoller {
     // Resolver servidor
     const serverInfo = resolveServer(projectPath);
     if (!serverInfo) {
-      console.warn(`[Poller] No se encontró servidor para: ${projectPath}`);
+      log.warn('Poller', ` No se encontró servidor para: ${projectPath}`);
       return;
     }
 
@@ -318,7 +319,7 @@ export class GitLabPoller {
         client = new GitLabClient(serverUrl, token);
         clientCache.set(serverName, client);
       } catch (error) {
-        console.error(`[Poller] No se pudo crear cliente para ${serverName}:`, error);
+        log.error('Poller', ` No se pudo crear cliente para ${serverName}:`, error);
         return;
       }
     }
@@ -326,7 +327,7 @@ export class GitLabPoller {
     // Resolver projectId desde el cache L1
     const projectId = resolveProjectId(projectPath);
     if (!projectId) {
-      console.warn(`[Poller] No se encontró projectId para ${projectPath} en cache L1`);
+      log.warn('Poller', ` No se encontró projectId para ${projectPath} en cache L1`);
       return;
     }
 
@@ -346,7 +347,7 @@ export class GitLabPoller {
         return;
       }
 
-      console.error(`[Poller] Error consultando pipeline de ${branchKey}:`, (error as Error).message);
+      log.error('Poller', ` Error consultando pipeline de ${branchKey}:`, (error as Error).message);
       return;
     }
 
@@ -358,7 +359,7 @@ export class GitLabPoller {
         rawJobs.reverse(); // GitLab los devuelve en orden inverso
         jobs = rawJobs;
       } catch (error) {
-        console.error(`[Poller] Error obteniendo jobs de pipeline ${pipeline.id}:`, (error as Error).message);
+        log.error('Poller', ` Error obteniendo jobs de pipeline ${pipeline.id}:`, (error as Error).message);
       }
     }
 

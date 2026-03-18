@@ -1,13 +1,22 @@
-import * as fs from 'fs';
 import * as yaml from 'js-yaml';
-import { Config } from './types';
+import { Config } from './types.ts';
 
-export function loadConfig(configPath: string = 'config.yaml'): Config {
+export async function loadConfig(configPath: string = 'config.yaml'): Promise<Config> {
   try {
-    const fileContents = fs.readFileSync(configPath, 'utf8');
+    const file = Bun.file(configPath);
+    const exists = await file.exists();
+
+    if (!exists) {
+      throw new Error(
+        `Config file not found: ${configPath}\n` +
+        'Please copy config.example.yaml to config.yaml and configure it.'
+      );
+    }
+
+    const fileContents = await file.text();
     const config = yaml.load(fileContents) as Config;
 
-    // Validate config
+    // Validar config
     if (!config.servers || config.servers.length === 0) {
       throw new Error('No servers configured');
     }
@@ -17,7 +26,7 @@ export function loadConfig(configPath: string = 'config.yaml'): Config {
         throw new Error(`Server "${server.name}" missing url`);
       }
 
-      // Validate tokens: support legacy single token or new tokens array
+      // Validar tokens: soporta legacy single token o nuevo tokens array
       const hasLegacyToken = !!server.token;
       const hasNewTokens = server.tokens && server.tokens.length > 0;
 
@@ -25,7 +34,7 @@ export function loadConfig(configPath: string = 'config.yaml'): Config {
         throw new Error(`Server "${server.name}" missing token or tokens array`);
       }
 
-      // If using new tokens array, validate each token
+      // Si usa nuevo tokens array, validar cada token
       if (hasNewTokens) {
         for (const token of server.tokens!) {
           if (!token.value) {
@@ -45,27 +54,25 @@ export function loadConfig(configPath: string = 'config.yaml'): Config {
       }
     }
 
-    // Set defaults
+    // Defaults
     config.refreshInterval = config.refreshInterval || 30;
     config.display = config.display || {};
     config.display.recentOnly = config.display.recentOnly ?? false;
     config.display.pipelinesPerBranch = config.display.pipelinesPerBranch || 1;
     config.display.compact = config.display.compact ?? false;
 
-    // Set cache TTL defaults (in seconds)
+    // Cache TTL defaults (en segundos)
     config.cache = config.cache || {};
-    config.cache.groupsProjects = config.cache.groupsProjects ?? 1800; // 30 minutes
-    config.cache.branches = config.cache.branches ?? 300;              // 5 minutes
-    config.cache.pipelines = config.cache.pipelines ?? 5;              // 5 seconds
+    config.cache.groupsProjects = config.cache.groupsProjects ?? 1800; // 30 minutos
+    config.cache.branches = config.cache.branches ?? 300;              // 5 minutos
+    config.cache.pipelines = config.cache.pipelines ?? 5;              // 5 segundos
 
     return config;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error(
-        `Config file not found: ${configPath}\n` +
-        'Please copy config.example.yaml to config.yaml and configure it.'
-      );
-    }
+    // Re-throw errores propios
     throw error;
   }
 }
+
+// Carga la config al inicio del módulo
+export const config = await loadConfig();

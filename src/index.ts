@@ -22,7 +22,7 @@ app.get('/about', (c) => c.redirect('/about.html'));
 app.use('/*', serveStatic({ root: './public' }));
 
 // Validar tokens al inicio
-log.info( 'GitLab Pipeline Status Monitor v2');
+log.info( 'GitLab Pipeline Status v2');
 log.info( `Monitoreando ${config.servers.length} servidor(es) GitLab`);
 log.info( 'Validando tokens...');
 

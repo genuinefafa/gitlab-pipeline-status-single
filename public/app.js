@@ -538,7 +538,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState(null);
 
-  const clientIdRef = useRef(crypto.randomUUID());
+  const clientIdRef = useRef(crypto.randomUUID?.() ?? Math.random().toString(36).slice(2));
   const esRef = useRef(null);
 
   const handlePipelinesUpdate = useCallback((newPipelines) => {

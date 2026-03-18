@@ -1,6 +1,7 @@
 import { GitLabServer, GitLabToken, TokenInfo, TokenHealthStatus } from './types.ts';
 import { GitLabClient } from './gitlab.ts';
-import { log } from './logger.ts';
+import { logger } from './logger.ts';
+const log = logger('Token');
 
 interface TokenWithHealth {
   token: GitLabToken;
@@ -115,7 +116,7 @@ export class TokenManager {
 
         // Log status
         const emoji = health.status === 'valid' ? '✓' : health.status === 'expiring' ? '⚠️' : '❌';
-        log.info('Token', `${emoji} "${token.name || tokenInfo.name}": ${health.message}`);
+        log.info( `${emoji} "${token.name || tokenInfo.name}": ${health.message}`);
 
       } catch (error) {
         // Token is invalid
@@ -128,7 +129,7 @@ export class TokenManager {
             message: `Failed to validate: ${(error as Error).message}`,
           },
         });
-        log.error('Token', `"${token.name || 'Unknown'}": Invalid or unreachable`);
+        log.error( `"${token.name || 'Unknown'}": Invalid or unreachable`);
       }
     }
 
@@ -154,13 +155,13 @@ export class TokenManager {
 
     if (usableToken) {
       if (usableToken.health.status === 'expiring') {
-        log.warn('Token', `Usando token por vencer "${usableToken.token.name}" para ${serverName}: ${usableToken.health.message}`);
+        log.warn( `Usando token por vencer "${usableToken.token.name}" para ${serverName}: ${usableToken.health.message}`);
       }
       return usableToken.token.value;
     }
 
     // No valid tokens, return first one anyway (will fail but with proper error)
-    log.error('Token', `Sin tokens válidos para ${serverName}, usando el primero (puede fallar)`);
+    log.error( `Sin tokens válidos para ${serverName}, usando el primero (puede fallar)`);
     return tokens[0].token.value;
   }
 

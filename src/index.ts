@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { log } from './logger.ts';
+import { logger } from './logger.ts';
+const log = logger('Server');
 import { serveStatic } from 'hono/bun';
 import { config } from './config.ts';
 import apiRoutes, { tokenManager } from './routes/api.ts';
@@ -21,21 +22,21 @@ app.get('/about', (c) => c.redirect('/about.html'));
 app.use('/*', serveStatic({ root: './public' }));
 
 // Validar tokens al inicio
-log.info('Server', 'GitLab Pipeline Status Monitor v2');
-log.info('Server', `Monitoreando ${config.servers.length} servidor(es) GitLab`);
-log.info('Server', 'Validando tokens...');
+log.info( 'GitLab Pipeline Status Monitor v2');
+log.info( `Monitoreando ${config.servers.length} servidor(es) GitLab`);
+log.info( 'Validando tokens...');
 
 for (const server of config.servers) {
   await tokenManager.validateServerTokens(server);
 }
 
 if (tokenManager.hasWarnings()) {
-  log.warn('Server', 'Algunos tokens están por vencer o son inválidos');
+  log.warn( 'Algunos tokens están por vencer o son inválidos');
 } else {
-  log.info('Server', 'Todos los tokens son válidos');
+  log.info( 'Todos los tokens son válidos');
 }
 
-log.info('Server', 'Escuchando en http://localhost:3000');
+log.info( 'Escuchando en http://localhost:3000');
 
 export default {
   port: 3000,

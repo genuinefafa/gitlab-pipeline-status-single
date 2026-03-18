@@ -1,4 +1,5 @@
-import { log } from './logger.ts';
+import { logger } from './logger.ts';
+const log = logger('SSE');
 
 /**
  * SSE Manager — Gestiona conexiones Server-Sent Events y suscripciones de clientes.
@@ -38,7 +39,7 @@ export class SSEManager {
       subscribedBranches: new Set(),
     });
 
-    log.info('SSE', ` Cliente conectado: ${clientId} (total: ${this.clients.size})`);
+    log.info( ` Cliente conectado: ${clientId} (total: ${this.clients.size})`);
   }
 
   /**
@@ -59,7 +60,7 @@ export class SSEManager {
     client.subscribedBranches.clear();
     this.clients.delete(clientId);
 
-    log.info('SSE', ` Cliente desconectado: ${clientId} (total: ${this.clients.size})`);
+    log.info( ` Cliente desconectado: ${clientId} (total: ${this.clients.size})`);
   }
 
   /**
@@ -69,7 +70,7 @@ export class SSEManager {
   subscribe(clientId: string, branches: string[]): void {
     const client = this.clients.get(clientId);
     if (!client) {
-      log.warn('SSE', ` subscribe: cliente ${clientId} no encontrado`);
+      log.warn( ` subscribe: cliente ${clientId} no encontrado`);
       return;
     }
 
@@ -179,7 +180,7 @@ export class SSEManager {
       client.controller.enqueue(encoder.encode(payload));
     } catch {
       // El stream ya se cerró — limpiar el cliente
-      log.warn('SSE', ` Error escribiendo a cliente ${client.id}, removiendo`);
+      log.warn( ` Error escribiendo a cliente ${client.id}, removiendo`);
       this.clients.delete(client.id);
       client.subscribedBranches.clear();
     }

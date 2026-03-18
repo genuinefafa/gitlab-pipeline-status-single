@@ -119,9 +119,15 @@ function connectSSE(clientId, onEvent, onStatusChange) {
   });
 
   es.onerror = () => {
-    onStatusChange(false);
-    es.close();
-    setTimeout(() => connectSSE(clientId, onEvent, onStatusChange), 5000);
+    // EventSource reconecta automáticamente. Solo marcamos desconectado
+    // para el indicador visual. Si el readyState es CLOSED (2), es definitivo.
+    if (es.readyState === EventSource.CLOSED) {
+      onStatusChange(false);
+      setTimeout(() => connectSSE(clientId, onEvent, onStatusChange), 5000);
+    } else {
+      // CONNECTING (0) — EventSource está reconectando solo
+      onStatusChange(false);
+    }
   };
 
   return es;

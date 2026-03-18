@@ -57,12 +57,10 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - gitlab-cache:/app/.cache
-    environment:
-      - NODE_ENV=production
     networks:
       - pi-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/about"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/version"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -252,7 +252,7 @@ function TokenStatus({ tokenStatus }) {
 function Header({ connected, tokenStatus, onRefresh }) {
   return html`
     <header class="header">
-      <h1><img src="/favicon.svg" alt="" class="app-icon" /> GitLab Pipeline Monitor</h1>
+      <h1><img src="/favicon.svg" alt="" class="app-icon" /> GitLab Pipeline Status</h1>
       <div class="header-actions">
         <${TokenStatus} tokenStatus=${tokenStatus} />
         <button onClick=${onRefresh}>Actualizar</button>

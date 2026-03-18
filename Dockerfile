@@ -1,69 +1,38 @@
 # ============================================================================
-# Multi-stage Dockerfile optimized for Raspberry Pi 5 (ARM64)
+# Dockerfile — Bun runtime (multi-arch: arm64 + amd64)
 # ============================================================================
 
-# ============================================================================
-# Stage 1: Build TypeScript
-# ============================================================================
-FROM node:20-alpine AS builder
+FROM oven/bun:1-alpine
 
-WORKDIR /build
-
-# Copy package files
-COPY package*.json ./
-COPY tsconfig.json ./
-
-# Install dependencies (including devDependencies for build)
-RUN npm ci
-
-# Copy source code
-COPY src/ ./src/
-
-# Build TypeScript
-RUN npm run build
-
-# ============================================================================
-# Stage 2: Production runtime
-# ============================================================================
-FROM node:20-alpine AS runtime
-
-# Install wget for healthcheck
-RUN apk add --no-cache wget
-
+# wget viene con busybox en alpine — necesario para healthcheck
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Instalar dependencias (copiar lock primero para cache de layers)
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
 
-# Install production dependencies only
-RUN npm ci --omit=dev && \
-    npm cache clean --force
+# Copiar código fuente y archivos estáticos
+COPY src/ ./src/
+COPY public/ ./public/
+COPY tsconfig.json ./
 
-# Copy compiled code from builder
-COPY --from=builder /build/dist ./dist
+# Info de versión inyectada al build
+ARG APP_VERSION=dev
+ARG APP_COMMIT=local
+ARG APP_BUILD_DATE=unknown
+ENV APP_VERSION=${APP_VERSION} \
+    APP_COMMIT=${APP_COMMIT} \
+    APP_BUILD_DATE=${APP_BUILD_DATE}
 
-# Copy templates (needed at runtime)
-COPY src/templates ./dist/templates
-
-# Copy static files
-COPY public ./public
-
-# Copy version information (generated before build)
-COPY VERSION ./dist/VERSION
-
-# Create cache directory with proper permissions
+# Cache directory
 RUN mkdir -p /app/.cache && \
-    chown -R node:node /app
+    chown -R bun:bun /app
 
-# Switch to non-root user for security
-USER node
+USER bun
 
-# Expose port (internal to container)
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:3000/about || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:3000/api/version || exit 1
 
-# Start application
-CMD ["node", "dist/api-server.js"]
+CMD ["bun", "run", "src/index.ts"]

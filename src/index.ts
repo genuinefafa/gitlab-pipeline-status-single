@@ -40,4 +40,5 @@ log.info('Server', 'Escuchando en http://localhost:3000');
 export default {
   port: 3000,
   fetch: app.fetch,
+  idleTimeout: 120, // segundos — SSE necesita conexiones idle largas
 };

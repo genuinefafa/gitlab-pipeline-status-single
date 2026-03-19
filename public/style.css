@@ -63,6 +63,16 @@ body {
   margin-right: 0.3rem;
 }
 .header-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.last-updated {
+  font-size: 0.75rem;
+  white-space: nowrap;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+.last-updated.ok { color: var(--success-text); }
+.last-updated.warning { color: var(--pending-text); background: var(--pending-bg); border-color: var(--pending-border); }
+.last-updated.error { color: var(--failed-text); background: var(--failed-bg); border-color: var(--failed-border); }
 
 /* Botones */
 button {
@@ -161,11 +171,16 @@ button:hover { background: var(--border); }
 }
 .project-card[open] > summary::before { transform: rotate(90deg); }
 .project-card > summary:hover { background: var(--border); }
-.project-card > summary a {
+.project-name {
   color: inherit;
-  text-decoration: none;
 }
-.project-card > summary a:hover { text-decoration: underline; }
+.gitlab-link {
+  text-decoration: none;
+  font-size: 0.85rem;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.gitlab-link:hover { opacity: 1; }
 
 /* Resumen de stages de master en el header del proyecto */
 .master-stages {
@@ -204,7 +219,11 @@ button:hover { background: var(--border); }
 }
 
 /* Datos desactualizados (restaurados de localStorage, esperando datos frescos) */
-.stale { opacity: 0.45; transition: opacity 0.4s ease; }
+.stale { opacity: 0.45; transition: opacity 0.4s ease; animation: stale-pulse 2s ease-in-out infinite; }
+@keyframes stale-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.25; }
+}
 
 /* Pipeline en commit distinto al branch actual */
 .desync-indicator {
@@ -230,7 +249,8 @@ button:hover { background: var(--border); }
   cursor: pointer;
   transition: background 0.15s;
   list-style: none;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 .branch-row > summary::-webkit-details-marker { display: none; }
 .branch-row > summary:hover { background: var(--bg-secondary); }
@@ -288,15 +308,38 @@ button:hover { background: var(--border); }
 }
 .mr-link:hover { text-decoration: underline; }
 
-.branch-row .commit-info {
+.commit-title {
   color: var(--text-muted);
   font-size: 0.8rem;
-  margin-left: auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 40%;
+  min-width: 0;
+  flex: 1 1 0;
+  text-decoration: none;
 }
+a.commit-title:hover { text-decoration: underline; color: var(--text); }
+
+.branch-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.commit-hash {
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  text-decoration: none;
+}
+a.commit-hash:hover { color: var(--text); text-decoration: underline; }
 
 /* Status badge */
 [data-status] {
@@ -392,6 +435,21 @@ button:hover { background: var(--border); }
   white-space: nowrap;
 }
 
+/* Skeleton placeholders */
+.skeleton {
+  display: inline-block;
+  height: 1.1em;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--border) 50%, var(--bg-secondary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+.skeleton-container { opacity: 0.7; }
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* Loading spinner */
 .spinner {
   display: inline-block;
@@ -423,6 +481,20 @@ button:hover { background: var(--border); }
   margin-bottom: 1rem;
   font-size: 0.85rem;
 }
+
+/* Warning (problemas parciales, GitLab timeout, etc.) */
+.warning-msg {
+  background: var(--pending-bg);
+  color: var(--pending-text);
+  border: 1px solid var(--pending-border);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+.warning-msg strong { display: block; margin-bottom: 0.3rem; }
+.warning-msg div { font-size: 0.8rem; opacity: 0.85; }
+.warning-msg a { color: var(--pending-text); font-weight: 600; }
 
 /* Footer */
 .app-footer {
@@ -458,7 +530,8 @@ button:hover { background: var(--border); }
   .header h1 { font-size: 1.2rem; }
   .branch-row > summary { padding-left: 1rem; }
   .pipeline-details { padding-left: 1rem; }
-  .commit-info { max-width: 100% !important; margin-left: 0 !important; flex-basis: 100%; }
+  .commit-title { display: none; }
+  .branch-actions { flex-wrap: wrap; }
   .stages-container { gap: 0.5rem; }
   .stage { min-width: 140px; }
 }

@@ -4,16 +4,16 @@ export class TTLCache<T> {
 
   constructor(private ttlMs: number) {}
 
-  /** Obtener un valor. Devuelve data y si está vencido (stale) */
-  get(key: string): { data: T | null; isStale: boolean } {
+  /** Obtener un valor. Devuelve data, si está vencido (stale), y cuándo se guardó */
+  get(key: string): { data: T | null; isStale: boolean; timestamp: number | null } {
     const entry = this.store.get(key);
     if (!entry) {
-      return { data: null, isStale: true };
+      return { data: null, isStale: true, timestamp: null };
     }
 
     const age = Date.now() - entry.timestamp;
     const isStale = age > this.ttlMs;
-    return { data: entry.data, isStale };
+    return { data: entry.data, isStale, timestamp: entry.timestamp };
   }
 
   /** Guardar un valor */

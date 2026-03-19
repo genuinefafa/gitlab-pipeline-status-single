@@ -56,16 +56,6 @@ export async function loadConfig(configPath: string = 'config.yaml'): Promise<Co
 
     // Defaults
     config.refreshInterval = config.refreshInterval || 30;
-    config.display = config.display || {};
-    config.display.recentOnly = config.display.recentOnly ?? false;
-    config.display.pipelinesPerBranch = config.display.pipelinesPerBranch || 1;
-    config.display.compact = config.display.compact ?? false;
-
-    // Cache TTL defaults (en segundos)
-    config.cache = config.cache || {};
-    config.cache.groupsProjects = config.cache.groupsProjects ?? 1800; // 30 minutos
-    config.cache.branches = config.cache.branches ?? 300;              // 5 minutos
-    config.cache.pipelines = config.cache.pipelines ?? 5;              // 5 segundos
 
     return config;
   } catch (error) {

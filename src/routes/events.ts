@@ -11,7 +11,8 @@ import { GitLabPoller } from '../poller.ts';
 
 // Instancias singleton exportadas para que otros módulos puedan usarlas
 export const sseManager = new SSEManager();
-export const poller = new GitLabPoller(sseManager);
+import { config } from '../config.ts';
+export const poller = new GitLabPoller(sseManager, config.refreshInterval * 1000);
 
 const app = new Hono();
 

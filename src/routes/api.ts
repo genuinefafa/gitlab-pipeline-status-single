@@ -79,31 +79,39 @@ function findServerForProject(projectPath: string): { server: GitLabServer; proj
  */
 api.get('/api/projects', async (c) => {
   try {
+    const force = c.req.query('force') === 'true';
     const servers = [];
+    const warnings: string[] = [];
+    let lastUpdated: string | null = null;
 
     for (const server of config.servers) {
       const cacheKey = `server:${server.name}`;
       const cached = projectsCache.get(cacheKey);
 
-      if (cached.data && !cached.isStale) {
+      if (cached.data && !cached.isStale && !force) {
+        // Cache fresco — usar directamente
+        if (cached.timestamp) lastUpdated = new Date(cached.timestamp).toISOString();
         const projects = (cached.data as Project[]).filter(
           p => !isProjectExcluded(p.name, p.path_with_namespace)
         );
         servers.push({
           name: server.name,
-          projects: projects.map(p => ({
-            id: p.id,
-            name: p.name,
-            path: p.path_with_namespace,
-            url: p.web_url,
-          })),
+          projects: projects
+            .map(p => ({
+              id: p.id,
+              name: p.name,
+              path: p.path_with_namespace,
+              url: p.web_url,
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
         });
         continue;
       }
 
-      // Fetch fresh
+      // Cache stale o vacío — intentar fetch fresco
       const client = new GitLabClient(server.url, getServerToken(server.name));
       const allProjects: Project[] = [];
+      let fetchFailed = false;
 
       // Proyectos individuales
       if (server.projects && server.projects.length > 0) {
@@ -112,7 +120,10 @@ api.get('/api/projects', async (c) => {
             const project = await client.getProject(projConfig);
             allProjects.push(project);
           } catch (error) {
-            log.error(`Error al obtener proyecto ${projConfig.path || projConfig.id}:`, (error as Error).message);
+            const msg = `${server.name}: error al obtener proyecto ${projConfig.path || projConfig.id} — ${(error as Error).message}`;
+            log.error(msg);
+            warnings.push(msg);
+            fetchFailed = true;
           }
         }
       }
@@ -124,13 +135,40 @@ api.get('/api/projects', async (c) => {
             const groupProjects = await client.getGroupProjects(groupConfig);
             allProjects.push(...groupProjects);
           } catch (error) {
-            log.error(`Error al obtener grupo ${groupConfig.path || groupConfig.id}:`, (error as Error).message);
+            const msg = `${server.name}: error al obtener grupo ${groupConfig.name || groupConfig.path || groupConfig.id} — ${(error as Error).message}`;
+            log.error(msg);
+            warnings.push(msg);
+            fetchFailed = true;
           }
         }
       }
 
-      // Guardar en cache L1
-      projectsCache.set(cacheKey, allProjects);
+      // Si falló y hay cache stale, usar cache viejo como fallback
+      if (fetchFailed && allProjects.length === 0 && cached.data) {
+        log.warn(`Usando cache stale para ${server.name} (edad: ${cached.timestamp ? Math.round((Date.now() - cached.timestamp) / 60000) + 'min' : '?'})`);
+        if (cached.timestamp) lastUpdated = new Date(cached.timestamp).toISOString();
+        const projects = (cached.data as Project[]).filter(
+          p => !isProjectExcluded(p.name, p.path_with_namespace)
+        );
+        servers.push({
+          name: server.name,
+          projects: projects
+            .map(p => ({
+              id: p.id,
+              name: p.name,
+              path: p.path_with_namespace,
+              url: p.web_url,
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        });
+        continue;
+      }
+
+      // Guardar en cache L1 (solo si hubo datos frescos)
+      if (allProjects.length > 0) {
+        projectsCache.set(cacheKey, allProjects);
+        lastUpdated = new Date().toISOString();
+      }
 
       const filtered = allProjects.filter(
         p => !isProjectExcluded(p.name, p.path_with_namespace)
@@ -138,16 +176,22 @@ api.get('/api/projects', async (c) => {
 
       servers.push({
         name: server.name,
-        projects: filtered.map(p => ({
-          id: p.id,
-          name: p.name,
-          path: p.path_with_namespace,
-          url: p.web_url,
-        })),
+        projects: filtered
+          .map(p => ({
+            id: p.id,
+            name: p.name,
+            path: p.path_with_namespace,
+            url: p.web_url,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
       });
     }
 
-    return c.json({ servers });
+    return c.json({
+      servers,
+      lastUpdated,
+      warnings: warnings.length > 0 ? warnings : undefined,
+    });
   } catch (error) {
     log.error('Error en /api/projects:', (error as Error).message);
     return c.json({ error: 'Error al obtener proyectos', message: (error as Error).message }, 500);
@@ -207,6 +251,7 @@ api.get('/api/projects/:projectPath{.+}/branches', async (c) => {
     const branchData = branches.map(b => ({
       name: b.name,
       commitTitle: b.commit.title,
+      commitId: b.commit.id,
       commitShortId: b.commit.short_id,
       committedDate: b.commit.committed_date,
       mergeRequest: undefined as {
@@ -245,11 +290,11 @@ api.get('/api/projects/:projectPath{.+}/branches', async (c) => {
 
     await Promise.all(mrPromises);
 
-    // Ordenar: master/main primero, luego por fecha descendente
+    // Ordenar: master/main primero, luego alfabéticamente
     branchData.sort((a, b) => {
       if (a.name === 'master' || a.name === 'main') return -1;
       if (b.name === 'master' || b.name === 'main') return 1;
-      return new Date(b.committedDate).getTime() - new Date(a.committedDate).getTime();
+      return a.name.localeCompare(b.name);
     });
 
     branchesCache.set(cacheKey, branchData);

@@ -38,6 +38,24 @@ function removeExpandedBranch(key) {
   saveExpandedBranches(getExpandedBranches().filter(k => k !== key));
 }
 
+// Cache de resumen de master por proyecto (para mostrar stale cuando el proyecto está cerrado)
+const STORAGE_KEY_MASTER = 'glpm-master-cache';
+
+function getMasterCache(projectPath) {
+  try {
+    const cache = JSON.parse(localStorage.getItem(STORAGE_KEY_MASTER) || '{}');
+    return cache[projectPath] || null;
+  } catch { return null; }
+}
+
+function saveMasterCache(projectPath, data) {
+  try {
+    const cache = JSON.parse(localStorage.getItem(STORAGE_KEY_MASTER) || '{}');
+    cache[projectPath] = data;
+    localStorage.setItem(STORAGE_KEY_MASTER, JSON.stringify(cache));
+  } catch { /* ignorar */ }
+}
+
 // --- Utilidades ---
 
 const STATUS_ICONS = {
@@ -249,11 +267,16 @@ function TokenStatus({ tokenStatus }) {
   `;
 }
 
-function Header({ connected, tokenStatus, onRefresh }) {
+function Header({ connected, tokenStatus, onRefresh, lastUpdated }) {
+  // Clasificar edad de los datos
+  const dataAge = lastUpdated ? (Date.now() - new Date(lastUpdated).getTime()) / 60000 : null;
+  const dataLevel = dataAge === null ? '' : dataAge < 2 ? 'ok' : dataAge < 10 ? 'warning' : 'error';
+
   return html`
     <header class="header">
       <h1><img src="/favicon.svg" alt="" class="app-icon" /> GitLab Pipeline Status</h1>
       <div class="header-actions">
+        ${lastUpdated && html`<span class="last-updated ${dataLevel}" title=${new Date(lastUpdated).toLocaleString()}>Datos: ${timeAgo(lastUpdated)}</span>`}
         <${TokenStatus} tokenStatus=${tokenStatus} />
         <button onClick=${onRefresh}>Actualizar</button>
         <span class="connection-dot ${connected ? 'connected' : 'disconnected'}"
@@ -324,7 +347,7 @@ function PipelineDetails({ pipeline }) {
   `;
 }
 
-function Branch({ branchKey, branchData, pipeline, isDeleted }) {
+function Branch({ branchKey, branchData, pipeline, isDeleted, projectUrl, isMaster }) {
   const status = pipeline ? pipeline.status : 'none';
   const mr = branchData.mergeRequest;
   // Detectar si el pipeline es de un commit diferente al actual del branch
@@ -334,6 +357,11 @@ function Branch({ branchKey, branchData, pipeline, isDeleted }) {
   const detailsRef = useRef(null);
   const wasExpanded = getExpandedBranches().includes(branchKey);
 
+  // URL del commit en GitLab
+  const commitUrl = projectUrl && branchData.commitId
+    ? `${projectUrl}/-/commit/${branchData.commitId}`
+    : null;
+
   useEffect(() => {
     if (wasExpanded && detailsRef.current) detailsRef.current.open = true;
   }, []);
@@ -342,6 +370,8 @@ function Branch({ branchKey, branchData, pipeline, isDeleted }) {
     if (e.target.open) addExpandedBranch(branchKey);
     else removeExpandedBranch(branchKey);
   }, [branchKey]);
+
+  const stopProp = (e) => e.stopPropagation();
 
   return html`
     <details class="branch-row ${isDeleted ? 'branch-deleted' : ''}" ref=${detailsRef} onToggle=${handleToggle} data-branch-key=${branchKey}>
@@ -353,20 +383,31 @@ function Branch({ branchKey, branchData, pipeline, isDeleted }) {
             : null
         }
         <code>${branchData.name}</code>
-        ${isDeleted ? html`<mark data-status="merged">mergeado</mark>` : html`<${StatusBadge} status=${status} />`}
-        <${MasterStages} pipeline=${pipeline} />
-        ${mr && html`
-          <a href=${mr.url} target="_blank" rel="noopener" class="mr-link"
-             onClick=${(e) => e.stopPropagation()}
-             title="MR !${mr.iid} → ${mr.targetBranch}">
-            !${mr.iid} ${mr.title}
-          </a>
-        `}
-        <span class="commit-info">
-          ${branchSha ? html`<span>${branchSha}</span>` : ''}
+        ${branchData.commitTitle && commitUrl
+          ? html`<a href=${commitUrl} target="_blank" rel="noopener" class="commit-title"
+                    onClick=${stopProp}
+                    title="${branchData.commitTitle}${branchData.committedDate ? ' — ' + timeAgo(branchData.committedDate) : ''}">${branchData.commitTitle}</a>`
+          : branchData.commitTitle
+            ? html`<span class="commit-title" title="${branchData.committedDate ? timeAgo(branchData.committedDate) : ''}">${branchData.commitTitle}</span>`
+            : null
+        }
+        <span class="branch-actions">
+          ${mr && html`
+            <a href=${mr.url} target="_blank" rel="noopener" class="mr-link"
+               onClick=${stopProp}
+               title="MR !${mr.iid} → ${mr.targetBranch}">
+              !${mr.iid} ${mr.title}
+            </a>
+          `}
+          ${isDeleted ? html`<mark data-status="merged">mergeado</mark>` : html`<${StatusBadge} status=${status} />`}
+          ${branchSha && commitUrl
+            ? html`<a href=${commitUrl} target="_blank" rel="noopener" class="commit-hash" onClick=${stopProp}>${branchSha}</a>`
+            : branchSha
+              ? html`<code class="commit-hash">${branchSha}</code>`
+              : null
+          }
           ${isDesynced ? html`<span class="desync-indicator" title="Pipeline en commit ${pipelineSha}, branch en ${branchSha}">⚡${pipelineSha}</span>` : ''}
-          ${branchData.committedDate ? html` <span>${timeAgo(branchData.committedDate)}</span>` : ''}
-          ${branchData.commitTitle && !mr ? html` ${branchData.commitTitle}` : ''}
+          <${MasterStages} pipeline=${pipeline} />
         </span>
       </summary>
       ${pipeline && html`<${PipelineDetails} pipeline=${pipeline} />`}
@@ -375,7 +416,7 @@ function Branch({ branchKey, branchData, pipeline, isDeleted }) {
   `;
 }
 
-function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, sseBranches, deletedBranches }) {
+function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, sseBranches, deletedBranches, masterDataReady }) {
   const [branches, setBranches] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -424,12 +465,13 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
     }
   }, [connected]);
 
-  // Actualizar branches cuando llegan por SSE (refresh periódico del poller)
+  // Actualizar branches cuando llegan por SSE o fetch inicial
   useEffect(() => {
     if (sseBranches && isOpen) {
       setBranches(sseBranches);
       setStale(false);
     }
+    // sseBranches siempre se usa para masterBranch (vía findMaster) aunque el proyecto esté cerrado
   }, [sseBranches]);
 
   const handleToggle = useCallback(async (e) => {
@@ -452,11 +494,46 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
     }
   }, [branches, clientId, project.path, loadBranches]);
 
-  // Pipeline de master/main para mostrar resumen de stages en el header
+  // Pipeline y datos de master/main para el header del proyecto
   const masterKey = `${project.path}/master`;
   const mainKey = `${project.path}/main`;
   const masterPipeline = pipelines[masterKey] || pipelines[mainKey];
-  const masterBranchKey = masterKey; // asumimos master, no main
+  const masterBranchKey = masterKey;
+  // Buscar branch master en state local o en sseBranches (que ahora se popula al inicio)
+  const findMaster = (list) => list?.find(b => b.name === 'master' || b.name === 'main');
+  const masterBranch = findMaster(branches) || findMaster(sseBranches);
+
+  // Cache de master en localStorage — guardar cuando hay datos frescos
+  const [masterCache, setMasterCache] = useState(() => getMasterCache(project.path));
+
+  useEffect(() => {
+    const commitTitle = masterBranch?.commitTitle || masterPipeline?.commit_title || null;
+    const commitShortId = masterBranch?.commitShortId || masterPipeline?.sha?.substring(0, 8) || null;
+    if (commitTitle || masterPipeline) {
+      const cached = {
+        status: masterPipeline?.status || 'none',
+        commitTitle,
+        commitShortId,
+        stages: masterPipeline?.jobs?.length > 0,
+      };
+      saveMasterCache(project.path, cached);
+      setMasterCache(cached);
+    }
+  }, [masterPipeline, masterBranch]);
+
+  // Datos a mostrar en header: live > cache > null
+  const hasMasterData = masterPipeline || masterBranch;
+  const masterDisplay = hasMasterData
+    ? {
+        status: masterPipeline?.status || 'none',
+        commitTitle: masterBranch?.commitTitle || masterPipeline?.commit_title,
+        commitShortId: masterBranch?.commitShortId || masterPipeline?.sha?.substring(0, 8),
+        pipeline: masterPipeline || null,
+        isStale: false,
+      }
+    : masterCache
+      ? { ...masterCache, pipeline: null, isStale: true }
+      : null;
 
   const handleExpandMaster = useCallback(async (e) => {
     e.stopPropagation();
@@ -482,16 +559,46 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
   return html`
     <details class="project-card" ref=${detailsRef} onToggle=${handleToggle}>
       <summary>
+        <span class="project-name">${project.name || project.path}</span>
         <a href=${project.url || '#'} target="_blank" rel="noopener"
-           onClick=${(e) => e.stopPropagation()}>${project.name || project.path}</a>
-        <${MasterStages} pipeline=${masterPipeline} onClick=${handleExpandMaster} />
+           class="gitlab-link" onClick=${(e) => e.stopPropagation()}
+           title="Abrir en GitLab">🦊</a>
+        ${!isOpen && masterDataReady && masterDisplay && html`
+          <span class="branch-actions ${masterDisplay.isStale ? 'stale' : ''}" onClick=${handleExpandMaster} style="cursor: pointer">
+            ${masterDisplay.commitTitle
+              ? html`<span class="commit-title" style="flex: 0 1 auto">${masterDisplay.commitTitle}</span>`
+              : null
+            }
+            <${StatusBadge} status=${masterDisplay.status} />
+            ${masterDisplay.commitShortId && html`<code class="commit-hash">${masterDisplay.commitShortId}</code>`}
+            <${MasterStages} pipeline=${masterDisplay.pipeline} />
+          </span>
+        `}
+        ${!isOpen && !masterDataReady && !masterCache && html`
+          <span class="branch-actions skeleton-container">
+            <span class="skeleton" style="width: 180px"></span>
+            <span class="skeleton" style="width: 70px"></span>
+            <span class="skeleton" style="width: 60px"></span>
+          </span>
+        `}
+        ${!isOpen && !masterDataReady && masterCache && html`
+          <span class="branch-actions stale" onClick=${handleExpandMaster} style="cursor: pointer">
+            ${masterCache.commitTitle
+              ? html`<span class="commit-title" style="flex: 0 1 auto">${masterCache.commitTitle}</span>`
+              : null
+            }
+            <${StatusBadge} status=${masterCache.status} />
+            ${masterCache.commitShortId && html`<code class="commit-hash">${masterCache.commitShortId}</code>`}
+          </span>
+        `}
       </summary>
       <div class="project-content ${stale ? 'stale' : ''}">
         ${loading && html`<div class="loading-text"><span class="spinner"></span> Cargando branches...</div>`}
         ${branches && branches.map(b => {
           const key = `${project.path}/${b.name}`;
           const isDeleted = deletedBranches?.has(key);
-          return html`<${Branch} key=${key} branchKey=${key} branchData=${b} pipeline=${pipelines[key]} isDeleted=${isDeleted} />`;
+          const isMaster = b.name === 'master' || b.name === 'main';
+          return html`<${Branch} key=${key} branchKey=${key} branchData=${b} pipeline=${pipelines[key]} isDeleted=${isDeleted} projectUrl=${project.url} isMaster=${isMaster} />`;
         })}
         ${branches && branches.length === 0 && html`<div class="loading-text">No se encontraron branches</div>`}
       </div>
@@ -499,7 +606,7 @@ function Project({ project, clientId, pipelines, onPipelinesUpdate, connected, s
   `;
 }
 
-function ProjectList({ servers, clientId, pipelines, onPipelinesUpdate, connected, branchesByProject, deletedBranches }) {
+function ProjectList({ servers, clientId, pipelines, onPipelinesUpdate, connected, branchesByProject, deletedBranches, masterDataReady }) {
   if (!servers || servers.length === 0) {
     return html`<div class="loading-text">No hay proyectos configurados</div>`;
   }
@@ -519,6 +626,7 @@ function ProjectList({ servers, clientId, pipelines, onPipelinesUpdate, connecte
               connected=${connected}
               sseBranches=${branchesByProject[project.path]}
               deletedBranches=${deletedBranches}
+              masterDataReady=${masterDataReady}
             />
           `)}
         </div>
@@ -535,7 +643,10 @@ function App() {
   const [tokenStatus, setTokenStatus] = useState(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState(null);
+  const [apiWarnings, setApiWarnings] = useState([]);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [masterDataReady, setMasterDataReady] = useState(false);
   const [version, setVersion] = useState(null);
 
   const clientIdRef = useRef(crypto.randomUUID?.() ?? Math.random().toString(36).slice(2));
@@ -577,14 +688,58 @@ function App() {
     }
   }, []);
 
-  const fetchProjects = useCallback(async () => {
+  const fetchProjects = useCallback(async (force = false) => {
     try {
-      const data = await fetchJSON('/api/projects');
-      setServers(data.servers || []);
+      const url = force ? '/api/projects?force=true' : '/api/projects';
+      const data = await fetchJSON(url);
+      const srvs = data.servers || [];
+      setServers(srvs);
       setError(null);
+      setApiWarnings(data.warnings || []);
+      if (data.lastUpdated) setLastUpdated(data.lastUpdated);
+      return srvs;
     } catch (err) {
       setError(`Error al cargar proyectos: ${err.message}`);
+      setApiWarnings([]);
+      return [];
     }
+  }, []);
+
+  // Cargar branches + pipelines de master/main para todos los proyectos (header cerrado)
+  const fetchMasterPipelines = useCallback(async (srvs) => {
+    const allProjects = srvs.flatMap(s => s.projects || []);
+    if (allProjects.length === 0) return;
+
+    // Fetch branches de todos los proyectos en paralelo
+    const branchResults = await Promise.allSettled(
+      allProjects.map(p => fetchJSON(`/api/projects/${p.path}/branches`).then(d => ({ path: p.path, branches: d.branches || [] })))
+    );
+    const branchMap = {};
+    for (const r of branchResults) {
+      if (r.status === 'fulfilled') {
+        branchMap[r.value.path] = r.value.branches;
+      }
+    }
+    setBranchesByProject(prev => ({ ...prev, ...branchMap }));
+
+    // Fetch pipelines de master/main
+    const masterBranches = allProjects.flatMap(p => [
+      `${p.path}/master`,
+      `${p.path}/main`,
+    ]);
+    try {
+      const data = await fetchJSON(`/api/status?branches=${masterBranches.join(',')}&includeJobs=true`);
+      if (data.pipelines) {
+        setPipelines(prev => ({ ...prev, ...data.pipelines }));
+      }
+    } catch (_) { /* no crítico */ }
+
+    // Suscribir a master/main de todos los proyectos para SSE
+    for (const p of allProjects) {
+      subscribeBranches(clientIdRef.current, p.path, ['master', 'main']).catch(() => {});
+    }
+
+    setMasterDataReady(true);
   }, []);
 
   const fetchTokenStatus = useCallback(async () => {
@@ -595,11 +750,13 @@ function App() {
   }, []);
 
   const handleRefresh = useCallback(async () => {
+    setMasterDataReady(false);
     setLoading(true);
-    await fetchProjects();
+    const srvs = await fetchProjects(true);
     await fetchTokenStatus();
     setLoading(false);
-  }, [fetchProjects, fetchTokenStatus]);
+    fetchMasterPipelines(srvs);
+  }, [fetchProjects, fetchTokenStatus, fetchMasterPipelines]);
 
   // Conectar SSE y resuscribir proyectos abiertos
   const connectAndSubscribe = useCallback(() => {
@@ -610,10 +767,12 @@ function App() {
   // Inicializacion
   useEffect(() => {
     const init = async () => {
-      await fetchProjects();
+      const srvs = await fetchProjects();
       await fetchTokenStatus();
       fetchJSON('/api/version').then(setVersion).catch(() => {});
       setLoading(false);
+      // Cargar pipelines de master/main para el header de proyectos cerrados
+      fetchMasterPipelines(srvs);
     };
     init();
     connectAndSubscribe();
@@ -653,8 +812,16 @@ function App() {
       connected=${connected}
       tokenStatus=${tokenStatus}
       onRefresh=${handleRefresh}
+      lastUpdated=${lastUpdated}
     />
     ${error && html`<div class="error-msg">${error}</div>`}
+    ${apiWarnings.length > 0 && html`
+      <div class="warning-msg">
+        <strong>⚠ Problemas de conectividad con GitLab</strong>
+        ${apiWarnings.map(w => html`<div>${w}</div>`)}
+        <div style="margin-top: 0.4rem"><a href="https://status.gitlab.com/" target="_blank" rel="noopener">Ver estado de GitLab</a></div>
+      </div>
+    `}
     ${loading
       ? html`<div class="loading-text"><span class="spinner"></span> Cargando proyectos...</div>`
       : html`<${ProjectList}
@@ -665,6 +832,7 @@ function App() {
           connected=${connected}
           branchesByProject=${branchesByProject}
           deletedBranches=${deletedBranches}
+          masterDataReady=${masterDataReady}
         />`
     }
     ${version && html`

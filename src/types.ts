@@ -1,20 +1,7 @@
-export interface CacheTTL {
-  groupsProjects?: number; // TTL in seconds for groups/projects cache (default: 1800s = 30min)
-  branches?: number;       // TTL in seconds for branches cache (default: 300s = 5min)
-  pipelines?: number;      // TTL in seconds for pipeline status cache (default: 5s)
-  statistics?: number;     // TTL in seconds for pipeline statistics cache (default: 1800s = 30min)
-}
-
 export interface Config {
   refreshInterval: number;
   servers: GitLabServer[];
   excludeProjects?: string[];
-  cache?: CacheTTL;
-  display?: {
-    recentOnly?: boolean;
-    pipelinesPerBranch?: number;
-    compact?: boolean;
-  };
 }
 
 export interface GitLabToken {

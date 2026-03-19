@@ -1,100 +1,39 @@
-# GitLab Pipeline Status Monitor Configuration
+# GitLab Pipeline Status — Configuration
 # Copy this file to config.yaml and fill in your details
 
-# Refresh interval in seconds
+# Polling interval in seconds (how often to check pipeline status)
 refreshInterval: 30
 
-# Projects to exclude (optional)
-# List project names or paths that should be excluded from monitoring
+# Projects to exclude (optional, case-insensitive partial match)
 excludeProjects:
   - "general"
   - "dockerconfig"
-  - "pipelines"
-  # You can use full paths too
   # - "group/unwanted-project"
 
-# GitLab servers configuration
+# GitLab servers
 servers:
-  # Example 1: Single token (legacy format - still supported)
+  # Single token (legacy format, still supported)
   - name: "GitLab Main"
     url: "https://gitlab.com"
-    token: "your-gitlab-token-here"
+    token: "glpat-xxxxxxxxxxxxxxxxxxxxx"
     projects:
-      - id: 12345
-        name: "my-project"
-      - id: 67890
-        name: "another-project"
-      # You can also use project path instead of ID
       - path: "group/project-name"
 
-  # Example 2: Multiple tokens with automatic fallback (RECOMMENDED)
-  # The monitor will use the first valid token and fall back to others if needed
+  # Multiple tokens with automatic fallback (recommended)
   - name: "GitLab Production"
     url: "https://gitlab.com"
     tokens:
-      # Primary token
       - value: "glpat-xxxxxxxxxxxxxxxxxxxxx"
         name: "Primary Token"
         expiresAt: "2025-12-31"  # Optional: helps track expiration
-      # Backup token (will be used if primary expires or fails)
       - value: "glpat-yyyyyyyyyyyyyyyyyyyyy"
         name: "Backup Token"
-        expiresAt: "2026-06-30"
     groups:
-      # Monitor all projects in a group by path
       - path: "my-organization/production-apps"
-        name: "Production Apps"
-      # Or by group ID
-      - id: 98765
-        name: "Backend Services"
-      # Include subgroups (optional, default: false)
       - path: "my-organization/all-projects"
         includeSubgroups: true
 
-  # Example 3: Mix both groups and individual projects
-  - name: "GitLab Self-Hosted"
-    url: "https://gitlab.example.com"
-    tokens:
-      - value: "your-token-1"
-        name: "Token 2025"
-        expiresAt: "2025-12-31"
-      - value: "your-token-2"
-        name: "Token 2026"
-    # Monitor specific projects
-    projects:
-      - path: "team/critical-app"
-    # AND entire groups
-    groups:
-      - path: "team/microservices"
-        includeSubgroups: true
-
-# Token Management Tips:
-# - Use multiple tokens to avoid service interruption when tokens expire
-# - Set expiresAt to track token expiration (system will warn you)
-# - Personal Access Tokens on GitLab.com Free tier can last up to 1 year
-# - Recommended: Configure 2 tokens with overlapping validity periods
-# - The UI will show warnings for expiring/expired tokens
-
-# Cache TTL (Time To Live) configuration in seconds
-# Adjust these values based on your needs:
-# - Lower values: More frequent updates, higher API usage
-# - Higher values: Less frequent updates, lower API usage
-cache:
-  # Groups/Projects cache TTL (default: 1800s = 30 minutes)
-  # Project structure changes rarely, so a longer TTL is recommended
-  groupsProjects: 1800
-  # Branches cache TTL (default: 300s = 5 minutes)
-  # Branches are created/deleted occasionally
-  branches: 300
-  # Pipeline status cache TTL (default: 5s)
-  # Pipeline status changes frequently, so a short TTL keeps data fresh
-  pipelines: 5
-
-# Display options
-display:
-  # Show only branches with recent activity (default: false)
-  recentOnly: false
-  # Number of pipelines to show per branch (default: 1)
-  pipelinesPerBranch: 1
-  # Compact mode (less spacing, default: false)
-  compact: false
+# Token tips:
+# - Use multiple tokens to avoid service interruption on expiry
+# - Set expiresAt to get warnings before tokens expire
+# - The UI shows health status for each token

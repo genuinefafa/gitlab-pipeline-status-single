@@ -17,3 +17,8 @@ gitlab_token.txt
 # PR creation temporary files
 PR-DESCRIPTION.md
 PR-INFO.txt
+
+# Claude Code: local settings and session artifacts
+.claude/settings.local.json
+.claude/worktrees/
+.claude/scheduled_tasks.lock
